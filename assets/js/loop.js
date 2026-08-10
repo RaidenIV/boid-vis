@@ -737,38 +737,60 @@ export const galaxyLoopController = (() => {
       renderWaveform($); renderMinimap($);
   }
 
-  // ── Init audio ──
+  // ── Init loop editor from the AudioBuffer that the host app already decoded ──
   async function initPopupAudio(buffer) {
       const overlay = document.getElementById('loop-modal-overlay');
       if (!overlay) return;
       const $ = id => overlay.querySelector('#' + id);
-      $('popup-analyzing').classList.add('show');
+      const analyzing = $('popup-analyzing');
+      const analyzingText = analyzing?.querySelector('.loop-analyzing-text');
+      if (analyzingText) analyzingText.textContent = 'Analysing audio…';
+      analyzing?.classList.add('show');
+
+      // The main loader already decoded the file. Do not create another audio
+      // context or make BPM analysis a prerequisite for opening the editor.
+      if (
+          !buffer ||
+          typeof buffer.getChannelData !== 'function' ||
+          !Number.isFinite(buffer.duration) ||
+          buffer.duration <= 0
+      ) {
+          console.error('Loop editor received an invalid decoded AudioBuffer.');
+          if (analyzingText) analyzingText.textContent = 'Audio buffer unavailable.';
+          return;
+      }
 
       try {
-          popupCtx = new (window.AudioContext || window.webkitAudioContext)();
-          popupGain = popupCtx.createGain();
-          popupGain.gain.value = popupVolume / 100;
-          popupGain.connect(popupCtx.destination);
-
           popupBuffer = buffer;
+
+          // Start with a usable BPM immediately. The already-computed host
+          // analysis is a reliable fallback if OfflineAudioContext analysis is
+          // unavailable or fails for a particular browser/file.
+          const analyzedFallback = detectTempo(state.analysis);
+          popupBpm = clamp(
+              Number.isFinite(analyzedFallback) && analyzedFallback > 0
+                  ? analyzedFallback
+                  : (state.loopBpm || 120),
+              40,
+              300
+          );
 
           $('popup-stat-rate').textContent = popupBuffer.sampleRate + ' Hz';
           $('popup-stat-dur').textContent  = fmtDur(popupBuffer.duration);
           $('popup-t-total').textContent   = fmtTime(popupBuffer.duration);
-
-          // BPM detection
-          popupBpm = await getLoopBpmDetection(popupBuffer);
           $('popup-bpm-input').value = popupBpm;
           $('popup-bpm-input').disabled = false;
           $('popup-stat-beat').textContent = (60 / popupBpm).toFixed(3) + 's';
 
-          // If existing loop in state, use it
+          // If an existing loop is active, preserve it exactly. Otherwise build
+          // the initial Binary Tower-style bar selection from the fallback BPM.
           if (state.audioLoop && state.loopEnd > state.loopStart) {
               popupLoopStart = state.loopStart;
               popupLoopEnd   = state.loopEnd;
               if (state.loopBpm > 0) {
-                  popupBpm = state.loopBpm;
+                  popupBpm = clamp(state.loopBpm, 40, 300);
                   $('popup-bpm-input').value = popupBpm;
+                  $('popup-stat-beat').textContent = (60 / popupBpm).toFixed(3) + 's';
                   const bd = (60 / popupBpm) * 4;
                   popupLoopBars = Math.max(1, Math.round((popupLoopEnd - popupLoopStart) / bd));
                   $('popup-bars-val').value = popupLoopBars;
@@ -783,21 +805,61 @@ export const galaxyLoopController = (() => {
           updateZoomDisplay($);
 
           buildPeaks();
-          renderWaveform($); renderMinimap($);
+          renderWaveform($);
+          renderMinimap($);
           syncBarsLimit($);
-          updateHandles($); updateLoopInfo($);
+          updateHandles($);
+          updateLoopInfo($);
 
           $('popup-play-btn').disabled = false;
           $('popup-stop-btn').disabled = false;
           $('popup-apply-btn').disabled = false;
           popupOffset = popupLoopStart;
-
       } catch (err) {
-          console.error('Popup audio init error:', err);
-          $('popup-analyzing').querySelector('.loop-analyzing-text').textContent = 'Error decoding audio.';
+          console.error('Loop editor initialization error:', err);
+          if (analyzingText) analyzingText.textContent = 'Loop editor initialization failed.';
           return;
       }
-      $('popup-analyzing').classList.remove('show');
+
+      // The editor is usable now; tempo refinement happens in the background.
+      analyzing?.classList.remove('show');
+
+      const bufferAtDetectionStart = popupBuffer;
+      try {
+          const detectedBpm = await Promise.race([
+              getLoopBpmDetection(bufferAtDetectionStart),
+              new Promise((_, reject) => {
+                  window.setTimeout(() => reject(new Error('BPM detection timed out.')), 8000);
+              })
+          ]);
+
+          if (!popupOpen || popupBuffer !== bufferAtDetectionStart) return;
+
+          const hadExistingLoop = Boolean(
+              state.audioLoop && state.loopEnd > state.loopStart
+          );
+          popupBpm = clamp(detectedBpm, 40, 300);
+          $('popup-bpm-input').value = popupBpm;
+          $('popup-stat-beat').textContent = (60 / popupBpm).toFixed(3) + 's';
+
+          if (hadExistingLoop) {
+              const barDuration = (60 / popupBpm) * 4;
+              popupLoopBars = Math.max(1, Math.round((popupLoopEnd - popupLoopStart) / barDuration));
+              $('popup-bars-val').value = popupLoopBars;
+          } else {
+              updateLoopEnd($);
+          }
+
+          syncBarsLimit($);
+          updateHandles($);
+          renderWaveform($);
+          renderMinimap($);
+          updateLoopInfo($);
+      } catch (err) {
+          // A BPM-analysis failure must never disable the loop editor. The
+          // fallback BPM above remains editable and all loop controls stay live.
+          console.warn('Loop BPM detection unavailable; using fallback BPM.', err);
+      }
   }
 
   // ── Peaks ──
@@ -1057,9 +1119,36 @@ export const galaxyLoopController = (() => {
   }
 
   // ── Playback ──
+  function ensurePopupAudioGraph($) {
+      if (popupCtx && popupGain) return true;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+          console.warn('Loop preview audio is unavailable: AudioContext is not supported.');
+          return false;
+      }
+
+      try {
+          popupCtx = new AudioContextClass();
+          popupGain = popupCtx.createGain();
+          popupGain.gain.value = popupMuted ? 0 : popupVolume / 100;
+          popupGain.connect(popupCtx.destination);
+          return true;
+      } catch (err) {
+          console.warn('Loop preview audio could not initialize.', err);
+          popupCtx = null;
+          popupGain = null;
+          const playButton = $('popup-play-btn');
+          if (playButton) {
+              playButton.disabled = true;
+              playButton.title = 'Preview audio is unavailable in this browser.';
+          }
+          return false;
+      }
+  }
+
   function popupPlay($) {
-      if (!popupBuffer || !popupCtx) return;
-      if (popupCtx.state === 'suspended') popupCtx.resume();
+      if (!popupBuffer || !ensurePopupAudioGraph($)) return;
+      if (popupCtx.state === 'suspended') void popupCtx.resume();
       if (popupForceRestartFromLoopStart) popupOffset = popupLoopStart;
       if (popupLoopOn && (popupOffset < popupLoopStart || popupOffset >= popupLoopEnd)) popupOffset = popupLoopStart;
       popupSource = popupCtx.createBufferSource();

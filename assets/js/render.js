@@ -164,6 +164,7 @@ function stepSimulation(stepTime, context) {
 
   const movement = {
     type: state.boidType,
+    morphSpeed: state.morphSpeed,
     speed: state.movementSpeed,
     amount: state.movementAmount / 100,
     alignment: state.boidAlignment / 100,

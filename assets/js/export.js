@@ -226,6 +226,7 @@ export function collectExportedControlValues() {
     loopEnd: state.loopEnd,
     reactivity: state.reactivity,
     boidType: state.boidType,
+    morphSpeed: state.morphSpeed,
     movementSpeed: state.movementSpeed,
     movementAmount: state.movementAmount,
     boidAlignment: state.boidAlignment,

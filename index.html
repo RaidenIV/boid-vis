@@ -270,7 +270,13 @@
                                         <option value="swarm">Swarm</option>
                                         <option value="vortex">Vortex</option>
                                         <option value="orbit">Orbit</option>
+                                        <option value="morph">Morph — All Types</option>
                                     </select>
+                                </div>
+                                <div class="control" id="morph-speed-control" hidden>
+                                    <label for="morph-speed">Morph Speed</label>
+                                    <div class="value-editor"><input class="value-input" id="morph-speed-value" type="number" min="0.1" max="3" step="0.05" value="1" aria-label="Morph Speed Value"><span class="value-suffix" aria-hidden="true">×</span></div>
+                                    <input type="range" id="morph-speed" min="0.1" max="3" step="0.05" value="1">
                                 </div>
                                 <div class="control">
                                     <label for="movement-speed">Movement Speed</label>

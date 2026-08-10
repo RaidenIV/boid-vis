@@ -28,6 +28,7 @@ const sectionKeys = {
   ],
   boids: [
     "boidType",
+    "morphSpeed",
     "movementSpeed",
     "movementAmount",
     "boidAlignment",
@@ -37,6 +38,7 @@ const sectionKeys = {
   particles: [
     "reactivity",
     "boidType",
+    "morphSpeed",
     "movementSpeed",
     "movementAmount",
     "boidAlignment",

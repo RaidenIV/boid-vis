@@ -28,6 +28,7 @@ export const defaults = Object.freeze({
   // Particles
   reactivity: 100,
   boidType: "flow",
+  morphSpeed: 1.0,
   movementSpeed: 1.0,
   movementAmount: 100,
   boidAlignment: 100,

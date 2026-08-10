@@ -18,7 +18,14 @@ const sectionKeys = {
   playback: ["volume", "muted", "audioLoop"],
   audio: ["fftSize", "smoothing"],
   viewport: ["viewportPreset"],
-  camera: ["cameraPreset", "cameraSpeed", "cameraAmount", "cameraDistance"],
+  camera: [
+    "cameraPreset",
+    "cameraSpeed",
+    "cameraAmount",
+    "cameraDistance",
+    "cameraElevation",
+    "cameraAzimuth"
+  ],
   boids: [
     "boidType",
     "movementSpeed",

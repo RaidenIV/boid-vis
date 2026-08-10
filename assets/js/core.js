@@ -125,6 +125,10 @@ export const elements = {
   cameraAmountValue: byId("camera-amount-value"),
   cameraDistance: byId("camera-distance"),
   cameraDistanceValue: byId("camera-distance-value"),
+  cameraElevation: byId("camera-elevation"),
+  cameraElevationValue: byId("camera-elevation-value"),
+  cameraAzimuth: byId("camera-azimuth"),
+  cameraAzimuthValue: byId("camera-azimuth-value"),
 
   // Audio resolution
   fftSize: byId("fft-size"),

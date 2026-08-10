@@ -22,6 +22,8 @@ export const defaults = Object.freeze({
   cameraSpeed: 1.0,
   cameraAmount: 100,
   cameraDistance: 50,
+  cameraElevation: 0,
+  cameraAzimuth: 0,
 
   // Particles
   reactivity: 100,

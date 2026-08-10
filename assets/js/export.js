@@ -214,6 +214,8 @@ export function collectExportedControlValues() {
     cameraSpeed: state.cameraSpeed,
     cameraAmount: state.cameraAmount,
     cameraDistance: state.cameraDistance,
+    cameraElevation: state.cameraElevation,
+    cameraAzimuth: state.cameraAzimuth,
     volume: state.volume,
     muted: state.muted,
     audioLoop: state.audioLoop,

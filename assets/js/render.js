@@ -248,6 +248,26 @@ function updateCamera() {
       break;
   }
 
+  // Apply user camera orientation as spherical angular offsets around the
+  // visualization. Zero elevation/azimuth preserves every preset exactly.
+  const sphericalRadius = Math.hypot(x, y, z);
+  if (sphericalRadius > 0) {
+    const baseAzimuth = Math.atan2(x, z);
+    const normalizedY = clamp(y / sphericalRadius, -1, 1);
+    const baseElevation = Math.asin(normalizedY);
+    const azimuth = baseAzimuth + state.cameraAzimuth * Math.PI / 180;
+    const elevation = clamp(
+      baseElevation + state.cameraElevation * Math.PI / 180,
+      -89 * Math.PI / 180,
+      89 * Math.PI / 180
+    );
+    const horizontalRadius = sphericalRadius * Math.cos(elevation);
+
+    x = Math.sin(azimuth) * horizontalRadius;
+    y = Math.sin(elevation) * sphericalRadius;
+    z = Math.cos(azimuth) * horizontalRadius;
+  }
+
   camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);
 }

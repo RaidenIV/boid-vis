@@ -79,6 +79,8 @@ function bindControls() {
   bindRange(elements.cameraSpeed, elements.cameraSpeedValue, "cameraSpeed");
   bindRange(elements.cameraAmount, elements.cameraAmountValue, "cameraAmount");
   bindRange(elements.cameraDistance, elements.cameraDistanceValue, "cameraDistance");
+  bindRange(elements.cameraElevation, elements.cameraElevationValue, "cameraElevation");
+  bindRange(elements.cameraAzimuth, elements.cameraAzimuthValue, "cameraAzimuth");
 
   // Particles
   bindRange(elements.reactivity, elements.reactivityValue, "reactivity");

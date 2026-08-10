@@ -19,6 +19,13 @@ export const defaults = Object.freeze({
 
   // Particles
   reactivity: 100,
+  boidType: "flow",
+  movementSpeed: 1.0,
+  movementAmount: 100,
+  boidAlignment: 100,
+  boidCohesion: 100,
+  boidSeparation: 100,
+  visualizationSize: 100,
   minParticles: 800,
   maxParticles: 20000,
   particleSize: 0.15,

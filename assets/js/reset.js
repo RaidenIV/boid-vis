@@ -18,8 +18,23 @@ const sectionKeys = {
   playback: ["volume", "muted", "audioLoop"],
   audio: ["fftSize", "smoothing"],
   viewport: ["viewportPreset"],
+  boids: [
+    "boidType",
+    "movementSpeed",
+    "movementAmount",
+    "boidAlignment",
+    "boidCohesion",
+    "boidSeparation"
+  ],
   particles: [
     "reactivity",
+    "boidType",
+    "movementSpeed",
+    "movementAmount",
+    "boidAlignment",
+    "boidCohesion",
+    "boidSeparation",
+    "visualizationSize",
     "minParticles",
     "maxParticles",
     "particleSize",

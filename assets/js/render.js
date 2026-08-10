@@ -102,12 +102,13 @@ function detectBeat(magnitudes, reactivity) {
 
 function updateParticleGeometry() {
   const activeCount = state.activeCount;
+  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
   for (let index = 0; index < activeCount; index += 1) {
     const particle = particles[index];
     const offset = index * 3;
-    swarm.positions[offset] = particle.positionX * RENDER_SCALE;
-    swarm.positions[offset + 1] = particle.positionY * RENDER_SCALE;
-    swarm.positions[offset + 2] = particle.positionZ * RENDER_SCALE;
+    swarm.positions[offset] = particle.positionX * visualizationScale;
+    swarm.positions[offset + 1] = particle.positionY * visualizationScale;
+    swarm.positions[offset + 2] = particle.positionZ * visualizationScale;
     swarm.colors[offset] = particle.colorR;
     swarm.colors[offset + 1] = particle.colorG;
     swarm.colors[offset + 2] = particle.colorB;
@@ -175,14 +176,27 @@ function stepSimulation(stepTime, context) {
   const stopsB = COLORMAPS[state.cmapB].stops;
   const mix = state.cmapMix;
 
+  const movement = {
+    type: state.boidType,
+    speed: state.movementSpeed,
+    amount: state.movementAmount / 100,
+    alignment: state.boidAlignment / 100,
+    cohesion: state.boidCohesion / 100,
+    separation: state.boidSeparation / 100
+  };
+
   for (let index = 0; index < state.activeCount; index += 1) {
     const particle = particles[index];
     particle.update(
+      index,
+      particles,
+      state.activeCount,
       state.time,
       amplitude,
       dynamicNoiseScale,
       dynamicSphereBoundary,
-      state.damping
+      state.damping,
+      movement
     );
 
     const distance = Math.sqrt(

@@ -77,6 +77,13 @@ function bindControls() {
 
   // Particles
   bindRange(elements.reactivity, elements.reactivityValue, "reactivity");
+  bindSelect(elements.boidType, "boidType");
+  bindRange(elements.movementSpeed, elements.movementSpeedValue, "movementSpeed");
+  bindRange(elements.movementAmount, elements.movementAmountValue, "movementAmount");
+  bindRange(elements.boidAlignment, elements.boidAlignmentValue, "boidAlignment");
+  bindRange(elements.boidCohesion, elements.boidCohesionValue, "boidCohesion");
+  bindRange(elements.boidSeparation, elements.boidSeparationValue, "boidSeparation");
+  bindRange(elements.visualizationSize, elements.visualizationSizeValue, "visualizationSize");
   bindRange(elements.minParticles, elements.minParticlesValue, "minParticles", (value) => {
     if (value > state.maxParticles) setControlValue("maxParticles", value);
   });

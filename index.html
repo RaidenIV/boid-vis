@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/loop-editor.css">
 </head>
 
 <body>
@@ -78,7 +79,7 @@
                             <input type="range" id="volume-slider" min="0" max="100" step="1" value="100">
                         </div>
 
-                        <div class="control toggle-control">
+                        <div class="control toggle-control playback-mute-control">
                             <label for="mute-toggle">Mute</label>
                             <label class="switch" for="mute-toggle" aria-label="Mute audio">
                                 <input class="switch-input" id="mute-toggle" type="checkbox" role="switch">
@@ -87,7 +88,7 @@
                         </div>
 
                         <!-- ---------------- Loop Selection ---------------- -->
-                        <div class="control-cluster is-collapsed" data-collapsible-title="Loop Selection">
+                        <div class="control-cluster is-collapsed legacy-loop-editor" data-collapsible-title="Loop Selection">
                             <div class="collapsible-header">
                                 <h3>Loop Selection</h3>
                                 <div class="collapsible-header-actions">
@@ -476,7 +477,7 @@
                     </div>
                     <div class="shortcut-item">
                         <div class="shortcut-key">L</div>
-                        <div class="shortcut-desc">Toggle Loop</div>
+                        <div class="shortcut-desc">Loop Editor</div>
                     </div>
                 </div>
 

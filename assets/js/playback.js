@@ -36,6 +36,14 @@ export async function togglePlayback() {
     state.isPlaying = false;
   } else {
     try {
+      if (
+        state.audioLoop &&
+        state.loopReady &&
+        state.loopEnd > state.loopStart &&
+        (audio.currentTime < state.loopStart || audio.currentTime >= state.loopEnd)
+      ) {
+        audio.currentTime = state.loopStart;
+      }
       await audio.play();
       state.isPlaying = true;
     } catch (error) {
@@ -83,6 +91,16 @@ export function updateTransportUi() {
 }
 
 export function updateLoopButtonState() {
-  elements.loopButton.classList.toggle("is-active", Boolean(state.audioLoop));
-  elements.loopButton.textContent = state.audioLoop ? "Loop On" : "Loop";
+  const duration = state.decodedAudioBuffer?.duration || audio.duration || 0;
+  const active = Boolean(
+    state.audioLoop &&
+    state.loopEnd > state.loopStart &&
+    duration > 0 &&
+    state.loopEnd - state.loopStart < duration - 1e-4
+  );
+  audio.loop = Boolean(state.audioLoop && duration > 0 && !active);
+  elements.loopButton.classList.remove("is-active");
+  elements.loopButton.classList.toggle("loop-active", active);
+  elements.loopButton.textContent = "Loop";
+  elements.loopButton.setAttribute("aria-pressed", String(active));
 }

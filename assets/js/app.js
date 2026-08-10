@@ -27,6 +27,7 @@ import { loadAudioFile, reanalyzeCurrentBuffer } from "./loader.js";
 import {
   applyLoopBars,
   drawLoopWaveform,
+  galaxyLoopController,
   initializeLoopEditor,
   runBpmDetection,
   setFullTrackLoop,
@@ -141,8 +142,7 @@ function bindTransport() {
   elements.playButton.addEventListener("click", togglePlayback);
 
   elements.loopButton.addEventListener("click", () => {
-    state.audioLoop = !state.audioLoop;
-    updateLoopButtonState();
+    galaxyLoopController.open();
   });
 
   audio.addEventListener("ended", () => {
@@ -307,8 +307,7 @@ function bindKeyboardShortcuts() {
     if (event.key === "l" || event.key === "L") {
       event.preventDefault();
       if (!elements.loopButton.disabled) {
-        state.audioLoop = !state.audioLoop;
-        updateLoopButtonState();
+        galaxyLoopController.open();
       }
     }
   });
@@ -368,6 +367,7 @@ function boot() {
 
   applyVolume();
   updateLoopButtonState();
+  galaxyLoopController.syncButton();
   setPlayButtonState();
   fitViewport();
   drawLoopWaveform();

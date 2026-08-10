@@ -646,6 +646,27 @@ input[type="range"]::-moz-range-thumb:hover {
     justify-self: end;
 }
 
+/* Keep the Beat Flash label in the label column and its switch in the value column. */
+label[for="beat-flash-enabled"]:not(.switch) {
+    grid-area: label;
+}
+label.switch[for="beat-flash-enabled"] {
+    grid-area: value;
+    justify-self: end;
+}
+
+/* Viewport Format needs separate rows for its select and explanatory hint. */
+#sectionViewport .control {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+        "label"
+        "input"
+        "hint";
+}
+#sectionViewport .control > .control-hint {
+    grid-area: hint;
+}
+
 /* Binary Tower loop button state: configured loops remain visibly active. */
 button.secondary#loop-btn.loop-active:not(:disabled) {
     border-color: #22c55e !important;

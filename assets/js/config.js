@@ -17,6 +17,12 @@ export const defaults = Object.freeze({
   // Viewport
   viewportPreset: "fill",
 
+  // Camera
+  cameraPreset: "static",
+  cameraSpeed: 1.0,
+  cameraAmount: 100,
+  cameraDistance: 50,
+
   // Particles
   reactivity: 100,
   boidType: "flow",
@@ -39,14 +45,6 @@ export const defaults = Object.freeze({
   bloomGain: 3.2,
   bloomRadius: 0.45,
   bloomThreshold: 0.45,
-
-  // Tunnel
-  tunnelSpeed: 1.0,
-  tunnelCount: 5000,
-  tunnelSize: 0.85,
-  tunnelOpacity: 50,
-  capOpacity: 22,
-  glowOpacity: 22,
 
   // Color
   lockedCmapIndex: -1,
@@ -85,11 +83,6 @@ export const engine = Object.freeze({
   PARTICLE_POOL: 40000,
   WORLD_BOUNDARY: 32,
   RENDER_SCALE: 20.0,
-  TUNNEL_RADIUS: 400,
-  TUNNEL_LENGTH: 16000,
-  TUNNEL_START: 220,
-  TUNNEL_POOL: 12000,
-  CAP_COUNT: 9000,
   BLOOM_LAYER: 1,
   BEAT_HISTORY: 43,
   BEAT_COOLDOWN_FRAMES: 14,

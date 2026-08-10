@@ -47,7 +47,6 @@ import {
 } from "./playback.js";
 import { renderFrame, resetSimulation } from "./render.js";
 import { initializeSectionResets, resetAll } from "./reset.js";
-import { setTunnelCount } from "./scene.js";
 import { clamp } from "./utils.js";
 import { fitViewport } from "./viewport.js";
 
@@ -74,6 +73,12 @@ function bindControls() {
 
   // Viewport
   bindSelect(elements.viewportPreset, "viewportPreset", () => fitViewport());
+
+  // Camera
+  bindSelect(elements.cameraPreset, "cameraPreset");
+  bindRange(elements.cameraSpeed, elements.cameraSpeedValue, "cameraSpeed");
+  bindRange(elements.cameraAmount, elements.cameraAmountValue, "cameraAmount");
+  bindRange(elements.cameraDistance, elements.cameraDistanceValue, "cameraDistance");
 
   // Particles
   bindRange(elements.reactivity, elements.reactivityValue, "reactivity");
@@ -104,14 +109,6 @@ function bindControls() {
   bindRange(elements.bloomRadius, elements.bloomRadiusValue, "bloomRadius");
   bindRange(elements.bloomThreshold, elements.bloomThresholdValue, "bloomThreshold");
 
-  // Tunnel
-  bindRange(elements.tunnelSpeed, elements.tunnelSpeedValue, "tunnelSpeed");
-  bindRange(elements.tunnelCount, elements.tunnelCountValue, "tunnelCount", setTunnelCount);
-  bindRange(elements.tunnelSize, elements.tunnelSizeValue, "tunnelSize");
-  bindRange(elements.tunnelOpacity, elements.tunnelOpacityValue, "tunnelOpacity");
-  bindRange(elements.capOpacity, elements.capOpacityValue, "capOpacity");
-  bindRange(elements.glowOpacity, elements.glowOpacityValue, "glowOpacity");
-
   // Color
   bindRange(elements.cycleSpeed, elements.cycleSpeedValue, "cycleSpeed");
   bindRange(elements.brightness, elements.brightnessValue, "brightness");
@@ -133,7 +130,6 @@ function bindControls() {
   bindSelect(elements.videoFrameRate, "videoFrameRate", () => {}, Number);
   bindSelect(elements.videoBitrate, "videoBitrateMbps", () => {}, Number);
 
-  setTunnelCount(state.tunnelCount);
 }
 
 /* ---------------------------------------------------------------------------

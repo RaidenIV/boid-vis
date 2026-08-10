@@ -18,6 +18,7 @@ const sectionKeys = {
   playback: ["volume", "muted", "audioLoop"],
   audio: ["fftSize", "smoothing"],
   viewport: ["viewportPreset"],
+  camera: ["cameraPreset", "cameraSpeed", "cameraAmount", "cameraDistance"],
   boids: [
     "boidType",
     "movementSpeed",
@@ -44,14 +45,6 @@ const sectionKeys = {
     "sphereBoundary"
   ],
   bloom: ["bloomBase", "bloomGain", "bloomRadius", "bloomThreshold"],
-  tunnel: [
-    "tunnelSpeed",
-    "tunnelCount",
-    "tunnelSize",
-    "tunnelOpacity",
-    "capOpacity",
-    "glowOpacity"
-  ],
   color: ["cycleSpeed", "brightness"],
   effects: ["beatFlashEnabled", "beatFlashIntensity", "beatSensitivity"],
   "export-format": [

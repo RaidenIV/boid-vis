@@ -156,6 +156,44 @@
                     </div>
                 </section>
 
+                <!-- ===================== CAMERA ===================== -->
+                <section class="section is-collapsed" data-collapsible-title="Camera">
+                    <div class="collapsible-header">
+                        <h2>Camera</h2>
+                        <div class="collapsible-header-actions">
+                            <button class="section-reset" data-reset-section="camera" title="Reset Camera to defaults" aria-label="Reset Camera to defaults" type="button">↺</button>
+                            <button class="collapse-toggle" aria-controls="sectionCamera" aria-expanded="false" title="Expand Camera" aria-label="Expand Camera" type="button">+</button>
+                        </div>
+                    </div>
+                    <div class="collapsible-content" id="sectionCamera">
+                        <div class="control">
+                            <label for="camera-preset">Movement Preset</label>
+                            <select id="camera-preset">
+                                <option value="static" selected>Static</option>
+                                <option value="orbit">Orbit</option>
+                                <option value="figure8">Figure Eight</option>
+                                <option value="pushPull">Push / Pull</option>
+                                <option value="drift">Drift</option>
+                            </select>
+                        </div>
+                        <div class="control">
+                            <label for="camera-speed">Movement Speed</label>
+                            <div class="value-editor"><input class="value-input" id="camera-speed-value" type="number" min="0.1" max="3" step="0.05" value="1" aria-label="Camera Movement Speed Value"><span class="value-suffix" aria-hidden="true">×</span></div>
+                            <input type="range" id="camera-speed" min="0.1" max="3" step="0.05" value="1">
+                        </div>
+                        <div class="control">
+                            <label for="camera-amount">Movement Amount</label>
+                            <div class="value-editor"><input class="value-input" id="camera-amount-value" type="number" min="0" max="200" step="5" value="100" aria-label="Camera Movement Amount Value"><span class="value-suffix" aria-hidden="true">%</span></div>
+                            <input type="range" id="camera-amount" min="0" max="200" step="5" value="100">
+                        </div>
+                        <div class="control">
+                            <label for="camera-distance">Camera Distance</label>
+                            <div class="value-editor"><input class="value-input" id="camera-distance-value" type="number" min="20" max="120" step="1" value="50" aria-label="Camera Distance Value"></div>
+                            <input type="range" id="camera-distance" min="20" max="120" step="1" value="50">
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ===================== AUDIO RESOLUTION ===================== -->
                 <section class="section is-collapsed" data-collapsible-title="Audio Resolution">
                     <div class="collapsible-header">
@@ -322,49 +360,6 @@
                                     <input type="range" id="bloom-threshold" min="0" max="1" step="0.05" value="0.45">
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ===================== TUNNEL ===================== -->
-                <section class="section is-collapsed" data-collapsible-title="Tunnel">
-                    <div class="collapsible-header">
-                        <h2>Tunnel</h2>
-                        <div class="collapsible-header-actions">
-                            <button class="section-reset" data-reset-section="tunnel" title="Reset Tunnel to defaults" aria-label="Reset Tunnel to defaults" type="button">↺</button>
-                            <button class="collapse-toggle" aria-controls="sectionTunnel" aria-expanded="false" title="Expand Tunnel" aria-label="Expand Tunnel" type="button">+</button>
-                        </div>
-                    </div>
-                    <div class="collapsible-content" id="sectionTunnel">
-                        <div class="control">
-                            <label for="tunnel-speed">Tunnel Speed</label>
-                            <div class="value-editor"><input class="value-input" id="tunnel-speed-value" type="number" min="0" max="3" step="0.05" value="1" aria-label="Tunnel Speed Value"><span class="value-suffix" aria-hidden="true">×</span></div>
-                            <input type="range" id="tunnel-speed" min="0" max="3" step="0.05" value="1">
-                        </div>
-                        <div class="control">
-                            <label for="tunnel-count">Tunnel Density</label>
-                            <div class="value-editor"><input class="value-input" id="tunnel-count-value" type="number" min="500" max="12000" step="250" value="5000" aria-label="Tunnel Density Value"></div>
-                            <input type="range" id="tunnel-count" min="500" max="12000" step="250" value="5000">
-                        </div>
-                        <div class="control">
-                            <label for="tunnel-size">Tunnel Point Size</label>
-                            <div class="value-editor"><input class="value-input" id="tunnel-size-value" type="number" min="0.2" max="3" step="0.05" value="0.85" aria-label="Tunnel Point Size Value"></div>
-                            <input type="range" id="tunnel-size" min="0.2" max="3" step="0.05" value="0.85">
-                        </div>
-                        <div class="control">
-                            <label for="tunnel-opacity">Tunnel Opacity</label>
-                            <div class="value-editor"><input class="value-input" id="tunnel-opacity-value" type="number" min="0" max="100" step="1" value="50" aria-label="Tunnel Opacity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
-                            <input type="range" id="tunnel-opacity" min="0" max="100" step="1" value="50">
-                        </div>
-                        <div class="control">
-                            <label for="cap-opacity">Far Cap Opacity</label>
-                            <div class="value-editor"><input class="value-input" id="cap-opacity-value" type="number" min="0" max="100" step="1" value="22" aria-label="Far Cap Opacity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
-                            <input type="range" id="cap-opacity" min="0" max="100" step="1" value="22">
-                        </div>
-                        <div class="control">
-                            <label for="glow-opacity">Far Glow</label>
-                            <div class="value-editor"><input class="value-input" id="glow-opacity-value" type="number" min="0" max="100" step="1" value="22" aria-label="Far Glow Value"><span class="value-suffix" aria-hidden="true">%</span></div>
-                            <input type="range" id="glow-opacity" min="0" max="100" step="1" value="22">
                         </div>
                     </div>
                 </section>

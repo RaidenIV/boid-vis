@@ -117,6 +117,15 @@ export const elements = {
   // Viewport
   viewportPreset: byId("viewport-preset"),
 
+  // Camera
+  cameraPreset: byId("camera-preset"),
+  cameraSpeed: byId("camera-speed"),
+  cameraSpeedValue: byId("camera-speed-value"),
+  cameraAmount: byId("camera-amount"),
+  cameraAmountValue: byId("camera-amount-value"),
+  cameraDistance: byId("camera-distance"),
+  cameraDistanceValue: byId("camera-distance-value"),
+
   // Audio resolution
   fftSize: byId("fft-size"),
   fftLoadWrap: byId("fft-load-wrap"),
@@ -165,20 +174,6 @@ export const elements = {
   bloomRadiusValue: byId("bloom-radius-value"),
   bloomThreshold: byId("bloom-threshold"),
   bloomThresholdValue: byId("bloom-threshold-value"),
-
-  // Tunnel
-  tunnelSpeed: byId("tunnel-speed"),
-  tunnelSpeedValue: byId("tunnel-speed-value"),
-  tunnelCount: byId("tunnel-count"),
-  tunnelCountValue: byId("tunnel-count-value"),
-  tunnelSize: byId("tunnel-size"),
-  tunnelSizeValue: byId("tunnel-size-value"),
-  tunnelOpacity: byId("tunnel-opacity"),
-  tunnelOpacityValue: byId("tunnel-opacity-value"),
-  capOpacity: byId("cap-opacity"),
-  capOpacityValue: byId("cap-opacity-value"),
-  glowOpacity: byId("glow-opacity"),
-  glowOpacityValue: byId("glow-opacity-value"),
 
   // Color
   cmapToggleRow: byId("cmap-toggle-row"),

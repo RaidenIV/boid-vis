@@ -12,20 +12,10 @@ import { state } from "./core.js";
 import { particles } from "./particles.js";
 import {
   camera,
-  capGeometry,
-  capMaterial,
-  cap,
-  glowMaterial,
-  glowSprite,
   particleGeometry,
   particleMaterial,
   renderScene,
   swarm,
-  tunnel,
-  tunnelGeometry,
-  tunnelMaterial,
-  vanishingMaterial,
-  tunnelGroup,
   bloomPass
 } from "./scene.js";
 import { clamp, sampleColormap } from "./utils.js";
@@ -34,12 +24,8 @@ const {
   BASE_FRAME_TIME,
   BEAT_HISTORY,
   BEAT_COOLDOWN_FRAMES,
-  CAP_COUNT,
   FLASH_DURATION,
-  RENDER_SCALE,
-  TUNNEL_LENGTH,
-  TUNNEL_RADIUS,
-  TUNNEL_START
+  RENDER_SCALE
 } = engine;
 
 let simulationAccumulator = 0;
@@ -217,90 +203,53 @@ function stepSimulation(stepTime, context) {
   detectBeat(state.magnitudes, reactivity);
 }
 
-function updateTunnel(deltaTime, isActive, magnitude) {
-  const speed = isActive
-    ? (260.0 + magnitude * 3600.0) * state.tunnelSpeed
-    : 0;
-  const intensity = isActive ? 0.22 + magnitude * 0.85 : 0.18;
-  const scrollTime = state.time;
+/**
+ * Update the camera from the selected movement preset. Static reproduces the
+ * previous fixed camera exactly; movement presets are deterministic so preview
+ * and export use the same camera path.
+ */
+function updateCamera() {
+  const distance = state.cameraDistance;
+  const amount = state.cameraAmount / 100;
+  const speed = state.cameraSpeed;
+  const time = state.time * speed;
+  const radius = distance * 0.42 * amount;
 
-  if (isActive || !state.hasAudio) {
-    const positions = tunnel.positions;
-    const colors = tunnel.colors;
+  let x = 0;
+  let y = 0;
+  let z = distance;
 
-    for (let index = 0; index < tunnel.count; index += 1) {
-      const offset = index * 3;
-      let z = positions[offset + 2];
-      z += speed * deltaTime;
-      if (z > -TUNNEL_START) {
-        z = -(TUNNEL_START + Math.random() * TUNNEL_LENGTH);
-      }
-      positions[offset + 2] = z;
-
-      const along = clamp((-z - TUNNEL_START) / TUNNEL_LENGTH, 0, 1);
-      const startFade = 0.01 + 1.0 * Math.pow(1.0 - along, 9.2);
-      const near = clamp(1.0 - along, 0, 1);
-      const far = 1.0 - near;
-      const fade = 0.2 + 0.8 * near + 0.25 * far;
-      const twinkle = 0.78 + 0.22 * Math.sin(scrollTime * 2.0 + index * 0.013);
-      const brightness = clamp(
-        intensity * fade * twinkle * tunnel.weights[index] * startFade,
-        0,
-        1
-      );
-
-      colors[offset] = brightness;
-      colors[offset + 1] = brightness;
-      colors[offset + 2] = brightness;
+  switch (state.cameraPreset) {
+    case "orbit": {
+      const angle = time * 0.55;
+      x = Math.cos(angle) * radius;
+      y = Math.sin(angle) * radius;
+      break;
     }
-
-    tunnelGeometry.attributes.position.needsUpdate = true;
-    tunnelGeometry.attributes.color.needsUpdate = true;
-
-    const capColors = cap.colors;
-    for (let index = 0; index < CAP_COUNT; index += 1) {
-      const offset = index * 3;
-      const twinkle = 0.84 + 0.16 * Math.sin(scrollTime * 1.1 + index * 0.019);
-      const brightness = clamp(
-        (0.16 + intensity * 0.62) * twinkle * cap.weights[index],
-        0,
-        1
-      );
-      capColors[offset] = brightness;
-      capColors[offset + 1] = brightness;
-      capColors[offset + 2] = brightness;
+    case "figure8": {
+      const angle = time * 0.5;
+      x = Math.sin(angle) * radius;
+      y = Math.sin(angle * 2) * radius * 0.5;
+      break;
     }
-    capGeometry.attributes.color.needsUpdate = true;
+    case "pushPull": {
+      const depthRange = distance * 0.35 * amount;
+      z = Math.max(5, distance + Math.sin(time * 0.7) * depthRange);
+      break;
+    }
+    case "drift": {
+      x = Math.sin(time * 0.42) * radius;
+      y = Math.sin(time * 0.31 + 1.35) * radius * 0.6;
+      z = Math.max(5, distance + Math.sin(time * 0.23 + 2.1) * radius * 0.45);
+      break;
+    }
+    case "static":
+    default:
+      break;
   }
 
-  // Material response to magnitude. The literal expressions are the original
-  // values; the control multipliers are 1.0 at their defaults.
-  const sizeScale = state.tunnelSize / 0.85;
-  const tunnelOpacityScale = state.tunnelOpacity / 50;
-  const capOpacityScale = state.capOpacity / 22;
-  const glowOpacityScale = state.glowOpacity / 22;
-
-  tunnelMaterial.size = (isActive ? 0.7 + magnitude * 1.1 : 0.75) * sizeScale;
-  tunnelMaterial.opacity =
-    (isActive ? 0.3 + magnitude * 0.4 : 0.28) * tunnelOpacityScale;
-
-  vanishingMaterial.size = isActive ? 1.1 + magnitude * 1.4 : 1.25;
-  vanishingMaterial.opacity = isActive ? 0.1 + magnitude * 0.22 : 0.12;
-
-  capMaterial.size = isActive ? 0.01 + magnitude * 0.01 : 0.92;
-  capMaterial.opacity =
-    (isActive ? 0.14 + magnitude * 0.22 : 0.14) * capOpacityScale;
-
-  glowMaterial.opacity =
-    (isActive ? 0.1 + magnitude * 0.35 : 0.12) * glowOpacityScale;
-  const glowScale = isActive
-    ? TUNNEL_RADIUS * (2.6 + magnitude * 1.0)
-    : TUNNEL_RADIUS * 2.75;
-  glowSprite.scale.set(glowScale, glowScale, 1);
-
-  // Keep the tunnel locked to the camera pose so perspective never drifts.
-  tunnelGroup.position.copy(camera.position);
-  tunnelGroup.quaternion.copy(camera.quaternion);
+  camera.position.set(x, y, z);
+  camera.lookAt(0, 0, 0);
 }
 
 /**
@@ -341,7 +290,6 @@ export function renderFrame(deltaTime, playing) {
     if (guard >= 8) simulationAccumulator = 0;
   }
 
-  updateTunnel(playing ? deltaTime : 0, isActive, avgMagnitude);
   advanceFlash(playing ? deltaTime : 0);
 
   particleMaterial.size =
@@ -357,6 +305,6 @@ export function renderFrame(deltaTime, playing) {
   bloomPass.threshold = state.bloomThreshold;
 
   updateParticleGeometry();
-  camera.lookAt(0, 0, 0);
+  updateCamera();
   renderScene();
 }

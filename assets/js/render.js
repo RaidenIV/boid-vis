@@ -115,6 +115,7 @@ function stepSimulation(stepTime, context) {
     isActive,
     avgMagnitude,
     sphereMagnitude,
+    trajectoryMagnitude,
     reactivity,
     brightness
   } = context;
@@ -171,7 +172,8 @@ function stepSimulation(stepTime, context) {
     amount: state.movementAmount / 100,
     alignment: state.boidAlignment / 100,
     cohesion: state.boidCohesion / 100,
-    separation: state.boidSeparation / 100
+    separation: state.boidSeparation / 100,
+    audioMagnitude: trajectoryMagnitude
   };
 
   for (let index = 0; index < state.activeCount; index += 1) {
@@ -307,6 +309,12 @@ export function renderFrame(deltaTime, playing) {
 
   const avgMagnitude = Math.min(1, rawAverage * reactivity);
   const sphereMagnitude = Math.min(1, state.lowFreqMagnitude * reactivity);
+  // Chaotic-attractor traversal follows full-spectrum normalized loudness, not
+  // only the low-frequency magnitude used by the sphere/bloom reactions.
+  const trajectoryMagnitude = Math.min(
+    1,
+    Math.max(0, Number(state.spectralEnergy) || rawAverage) * reactivity
+  );
   const brightness =
     (isActive ? 0.25 + sphereMagnitude * 0.95 : 0.25) *
     (state.brightness / 100);
@@ -319,6 +327,7 @@ export function renderFrame(deltaTime, playing) {
         isActive,
         avgMagnitude,
         sphereMagnitude,
+        trajectoryMagnitude,
         reactivity,
         brightness
       });

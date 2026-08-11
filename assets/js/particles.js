@@ -299,10 +299,10 @@ function writeAttractorAcceleration(
     dadras: 0.18
   }[type] || 0.35;
   const audioEnergy = Math.max(0, Math.min(1, audioMagnitude));
-  // Audio magnitude changes traversal speed along the vector field itself, not
-  // the shape of the attractor. Quiet passages creep through the path; louder
-  // passages advance substantially faster while remaining on the same flow.
-  const trajectorySpeed = 0.38 + Math.pow(audioEnergy, 0.72) * 2.9;
+  // Loudness directly scales the first-order velocity along the attractor
+  // field. Use a wide range so the speed difference is perceptually obvious:
+  // near-silence creeps along the path while loud sections race through it.
+  const trajectorySpeed = 0.12 + Math.pow(audioEnergy, 1.05) * 7.4;
   const fieldGain =
     boundary *
     (0.18 + movement.cohesion * 0.025) *
@@ -311,7 +311,9 @@ function writeAttractorAcceleration(
   const desiredVelocityX = dx * fieldGain;
   const desiredVelocityY = dy * fieldGain;
   const desiredVelocityZ = dz * fieldGain;
-  const steering = 1.15 + movement.alignment * 0.45;
+  // Increase tracking authority with loudness so the particle velocity can
+  // actually reach the louder target speed instead of damping away the effect.
+  const steering = 1.55 + movement.alignment * 0.45 + audioEnergy * 3.15;
   const particleOffset = ((index % 97) / 96 - 0.5) * 0.018;
   const normalizedRadius = Math.sqrt(nx * nx + ny * ny + nz * nz);
   const softContainment = Math.max(0, normalizedRadius - 1.08) * 1.9;
@@ -547,7 +549,7 @@ function writeModeAcceleration(
       velocityZ,
       sphereBoundary,
       movement,
-      audioMagnitude,
+      movement.audioMagnitude ?? audioMagnitude,
       noiseX,
       noiseY,
       noiseZ
@@ -883,7 +885,7 @@ export class Particle {
         this.velocityZ,
         sphereBoundary,
         movement,
-        amplitude,
+        movement.audioMagnitude ?? amplitude,
         noiseX,
         noiseY,
         noiseZ
@@ -894,7 +896,16 @@ export class Particle {
     }
 
     // At the defaults, Flow uses the original gain expression exactly.
-    const gain = DT * (0.25 + amplitude * 1.75) * amount * speed;
+    // Attractor modes carry loudness in their target velocity instead, so do
+    // not multiply them again by the bass-only amplitude term.
+    const usesDirectAttractorTraversal =
+      ATTRACTOR_TYPE_SET.has(movement.type) ||
+      (movement.type === "morph" && movement.morphScope === "attractors");
+    const gain =
+      DT *
+      (usesDirectAttractorTraversal ? 1 : 0.25 + amplitude * 1.75) *
+      amount *
+      speed;
 
     this.velocityX = this.velocityX * damping + ax * gain;
     this.velocityY = this.velocityY * damping + ay * gain;

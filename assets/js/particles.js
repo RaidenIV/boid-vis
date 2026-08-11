@@ -10,10 +10,137 @@ import { SimplexNoise } from "./noise.js";
 
 const { DT, PARTICLE_POOL } = engine;
 const FLOCK_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127]);
-const MORPH_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit"]);
+const LIQUID_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127, 509, 2039]);
+const MORPH_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit", "liquid"]);
 const MORPH_SECONDS_PER_TYPE = 4;
 const MORPH_ACCEL_A = new Float64Array(3);
 const MORPH_ACCEL_B = new Float64Array(3);
+const LIQUID_ACCEL = new Float64Array(3);
+
+
+function writeLiquidAcceleration(
+  output,
+  index,
+  pool,
+  activeCount,
+  x,
+  y,
+  z,
+  velocityX,
+  velocityY,
+  velocityZ,
+  movementTime,
+  sphereBoundary,
+  movement,
+  noiseX,
+  noiseY,
+  noiseZ
+) {
+  let pressureX = 0;
+  let pressureY = 0;
+  let pressureZ = 0;
+  let centerX = 0;
+  let centerY = 0;
+  let centerZ = 0;
+  let averageVelocityX = 0;
+  let averageVelocityY = 0;
+  let averageVelocityZ = 0;
+  let weightTotal = 0;
+
+  // A sampled-neighbor SPH-style approximation keeps the mode practical even
+  // at the visualizer's maximum particle count. Separation acts as pressure,
+  // alignment as viscosity, and cohesion as surface tension.
+  const interactionRadius = Math.max(0.08, sphereBoundary * 0.5);
+  const inverseInteractionRadius = 1 / interactionRadius;
+
+  if (activeCount > 1) {
+    for (const offset of LIQUID_NEIGHBOR_OFFSETS) {
+      const neighborIndex = (index + offset) % activeCount;
+      if (neighborIndex === index) continue;
+      const neighbor = pool[neighborIndex];
+      const dx = neighbor.positionX - x;
+      const dy = neighbor.positionY - y;
+      const dz = neighbor.positionZ - z;
+      const distanceSquared = dx * dx + dy * dy + dz * dz;
+      if (distanceSquared <= 1e-8) continue;
+
+      const distance = Math.sqrt(distanceSquared);
+      if (distance >= interactionRadius) continue;
+
+      const q = 1 - distance * inverseInteractionRadius;
+      const weight = q * q;
+      const inverseDistance = 1 / distance;
+
+      // Short-range pressure prevents the cohesive fluid mass from collapsing.
+      const pressure = weight * (0.38 + movement.separation * 0.9);
+      pressureX -= dx * inverseDistance * pressure;
+      pressureY -= dy * inverseDistance * pressure;
+      pressureZ -= dz * inverseDistance * pressure;
+
+      centerX += neighbor.positionX * weight;
+      centerY += neighbor.positionY * weight;
+      centerZ += neighbor.positionZ * weight;
+      averageVelocityX += neighbor.velocityX * weight;
+      averageVelocityY += neighbor.velocityY * weight;
+      averageVelocityZ += neighbor.velocityZ * weight;
+      weightTotal += weight;
+    }
+  }
+
+  let surfaceX = 0;
+  let surfaceY = 0;
+  let surfaceZ = 0;
+  let viscosityX = 0;
+  let viscosityY = 0;
+  let viscosityZ = 0;
+
+  if (weightTotal > 1e-6) {
+    const inverseWeight = 1 / weightTotal;
+    centerX *= inverseWeight;
+    centerY *= inverseWeight;
+    centerZ *= inverseWeight;
+    averageVelocityX *= inverseWeight;
+    averageVelocityY *= inverseWeight;
+    averageVelocityZ *= inverseWeight;
+
+    surfaceX = (centerX - x) * movement.cohesion * 0.52;
+    surfaceY = (centerY - y) * movement.cohesion * 0.52;
+    surfaceZ = (centerZ - z) * movement.cohesion * 0.52;
+
+    viscosityX = (averageVelocityX - velocityX) * movement.alignment * 0.82;
+    viscosityY = (averageVelocityY - velocityY) * movement.alignment * 0.82;
+    viscosityZ = (averageVelocityZ - velocityZ) * movement.alignment * 0.82;
+  }
+
+  // Move the body of fluid around a low, slowly shifting center to create
+  // slosh and droplet deformation rather than flock-like directional travel.
+  const sloshRadius = sphereBoundary * 0.22;
+  const targetX = Math.sin(movementTime * 0.63) * sloshRadius;
+  const targetY =
+    -sphereBoundary * 0.16 + Math.sin(movementTime * 0.41 + 1.2) * sloshRadius * 0.16;
+  const targetZ = Math.cos(movementTime * 0.53) * sloshRadius;
+  const bodyStrength = 0.14 + movement.cohesion * 0.12;
+
+  output[0] =
+    pressureX +
+    surfaceX +
+    viscosityX +
+    (targetX - x) * bodyStrength +
+    noiseX * 0.12;
+  output[1] =
+    pressureY +
+    surfaceY +
+    viscosityY +
+    (targetY - y) * bodyStrength -
+    0.11 +
+    noiseY * 0.09;
+  output[2] =
+    pressureZ +
+    surfaceZ +
+    viscosityZ +
+    (targetZ - z) * bodyStrength +
+    noiseZ * 0.12;
+}
 
 function writeModeAcceleration(
   output,
@@ -194,6 +321,26 @@ function writeModeAcceleration(
       positionZ * radialError * movement.cohesion * 0.85 +
       positionZ * movement.separation * 0.06 +
       noiseZ * 0.18;
+  } else if (type === "liquid") {
+    writeLiquidAcceleration(
+      output,
+      index,
+      pool,
+      activeCount,
+      x,
+      y,
+      z,
+      velocityX,
+      velocityY,
+      velocityZ,
+      movementTime,
+      sphereBoundary,
+      movement,
+      noiseX,
+      noiseY,
+      noiseZ
+    );
+    return;
   }
 
   output[0] = ax;
@@ -485,6 +632,28 @@ export class Particle {
         positionZ * radialError * movement.cohesion * 0.85 +
         positionZ * movement.separation * 0.06 +
         noiseZ * 0.18;
+    } else if (movement.type === "liquid") {
+      writeLiquidAcceleration(
+        LIQUID_ACCEL,
+        index,
+        pool,
+        activeCount,
+        x,
+        y,
+        z,
+        this.velocityX,
+        this.velocityY,
+        this.velocityZ,
+        movementTime,
+        sphereBoundary,
+        movement,
+        noiseX,
+        noiseY,
+        noiseZ
+      );
+      ax = LIQUID_ACCEL[0];
+      ay = LIQUID_ACCEL[1];
+      az = LIQUID_ACCEL[2];
     }
 
     // At the defaults, Flow uses the original gain expression exactly.

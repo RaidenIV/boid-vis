@@ -291,6 +291,8 @@ export function sampleAnalysisAtTime(seconds) {
   if (!analysis) {
     state.magnitudes.fill(0);
     state.lowFreqMagnitude = 0;
+    state.spectralEnergy = 0;
+    state.attractorEnergy = 0;
     return;
   }
 
@@ -315,7 +317,17 @@ export function sampleAnalysisAtTime(seconds) {
   }
   state.lowFreqMagnitude = normalizeAmplitude(analysis.low[frameIndex], reference);
   state.spectralCentroid = analysis.centroid?.[frameIndex] ?? 0.5;
-  state.spectralEnergy = normalizeAmplitude(analysis.overall?.[frameIndex] || 0, reference);
+  const rawOverall = analysis.overall?.[frameIndex] || 0;
+  state.spectralEnergy = normalizeAmplitude(rawOverall, reference);
+
+  // Chaotic-attractor traversal needs the track's actual loudness contrast.
+  // Adaptive amplitude normalization intentionally keeps visual amplitude near
+  // a stable level, which is useful for particle size/brightness but makes it
+  // a poor speed control. Keep a separate track-relative energy signal so a
+  // quiet passage stays quiet and a loud passage produces a visibly faster
+  // traversal regardless of the selected amplitude-normalization mode.
+  const attractorReference = Math.max(0.04, analysis.trackPeak || 0.04);
+  state.attractorEnergy = clamp(rawOverall / attractorReference, 0, 1);
   state.adaptiveReference = analysis.adaptivePeak?.[frameIndex] || 0;
 }
 

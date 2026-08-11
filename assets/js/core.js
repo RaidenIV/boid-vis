@@ -23,6 +23,7 @@ export const state = {
   lowFreqMagnitude: 0,
   spectralCentroid: 0.5,
   spectralEnergy: 0,
+  attractorEnergy: 0,
   adaptiveReference: 0,
 
   // Simulation clock

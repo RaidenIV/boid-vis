@@ -385,7 +385,7 @@ export function renderFrame(deltaTime, playing) {
   // dilation signal. Attack is quick enough to feel musical; release is slower
   // so particle speed does not chatter frame-to-frame and destroy the shape.
   const trajectoryTarget = clamp(
-    Math.max(0, Number(state.spectralEnergy) || rawAverage) * reactivity,
+    Math.max(0, Number(state.attractorEnergy) || 0) * reactivity,
     0,
     1
   );

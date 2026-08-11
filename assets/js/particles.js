@@ -298,18 +298,14 @@ function writeAttractorAcceleration(
     thomas: 0.9,
     dadras: 0.18
   }[type] || 0.35;
-  const audioEnergy = Math.max(0, Math.min(1, audioMagnitude));
-  // Audio changes the rate at which particles advance through the existing
-  // vector field rather than changing the equations themselves. Keep this
-  // bounded: overly aggressive time-scaling distorts chaotic trajectories.
-  // The smoothed energy supplied by render.js gives a clear quiet-to-loud
-  // difference without making the attractor numerically unstable.
-  const trajectorySpeed = 0.55 + Math.pow(audioEnergy, 0.78) * 2.15;
+  // Keep the attractor vector field itself independent of loudness. Audio
+  // controls traversal later in the integration step, so changing magnitude
+  // cannot reshape the Lorenz/Rössler/etc. field or alter its characteristic
+  // geometry.
   const fieldGain =
     boundary *
     (0.18 + movement.cohesion * 0.025) *
-    attractorSpeedScale *
-    trajectorySpeed;
+    attractorSpeedScale;
   const desiredVelocityX = dx * fieldGain;
   const desiredVelocityY = dy * fieldGain;
   const desiredVelocityZ = dz * fieldGain;
@@ -904,6 +900,20 @@ export class Particle {
     const usesDirectAttractorTraversal =
       ATTRACTOR_TYPE_SET.has(movement.type) ||
       (movement.type === "morph" && movement.morphScope === "attractors");
+    const attractorEnergy = Math.max(
+      0,
+      Math.min(1, movement.audioMagnitude ?? amplitude)
+    );
+    // Make loudness affect the distance travelled along the already-computed
+    // attractor tangent, not the field itself. A smoothstep curve gives quiet
+    // passages a deliberate crawl and lets loud passages move up to ~5.5x the
+    // normal path distance immediately, which is visually obvious without
+    // changing the attractor's equations or orientation.
+    const energyCurve =
+      attractorEnergy * attractorEnergy * (3 - 2 * attractorEnergy);
+    const attractorTraversal = usesDirectAttractorTraversal
+      ? 0.32 + energyCurve * 5.18
+      : 1;
     const gain =
       DT *
       (usesDirectAttractorTraversal ? 1 : 0.25 + amplitude * 1.75) *
@@ -914,9 +924,10 @@ export class Particle {
     this.velocityY = this.velocityY * damping + ay * gain;
     this.velocityZ = this.velocityZ * damping + az * gain;
 
-    this.positionX += this.velocityX * DT * speed;
-    this.positionY += this.velocityY * DT * speed;
-    this.positionZ += this.velocityZ * DT * speed;
+    const positionStep = DT * speed * attractorTraversal;
+    this.positionX += this.velocityX * positionStep;
+    this.positionY += this.velocityY * positionStep;
+    this.positionZ += this.velocityZ * positionStep;
 
     const usesAttractorBounds =
       ATTRACTOR_TYPE_SET.has(movement.type) ||

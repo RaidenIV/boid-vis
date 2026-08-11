@@ -410,6 +410,48 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="control-cluster is-collapsed" data-collapsible-title="Chaotic Attractors">
+                            <div class="collapsible-header">
+                                <h3>Chaotic Attractors</h3>
+                                <div class="collapsible-header-actions">
+                                    <button class="section-reset" data-reset-section="attractors" title="Reset Chaotic Attractors to defaults" aria-label="Reset Chaotic Attractors to defaults" type="button">↺</button>
+                                    <button class="collapse-toggle" aria-controls="clusterAttractors" aria-expanded="false" title="Expand Chaotic Attractors" aria-label="Expand Chaotic Attractors" type="button">+</button>
+                                </div>
+                            </div>
+                            <div class="collapsible-content" id="clusterAttractors">
+                                <div class="control">
+                                    <label for="attractor-color-source">Color Source</label>
+                                    <select id="attractor-color-source">
+                                        <option value="speed" selected>Speed — Trajectory Velocity</option>
+                                        <option value="lobe">Lobe — Wing Membership</option>
+                                        <option value="radius">Radius — Distance From Center</option>
+                                    </select>
+                                </div>
+                                <div class="control toggle-control">
+                                    <label for="attractor-trails">Trails</label>
+                                    <label class="switch" for="attractor-trails" aria-label="Attractor trails">
+                                        <input class="switch-input" id="attractor-trails" type="checkbox" role="switch" checked>
+                                        <span class="switch-track" aria-hidden="true"></span>
+                                    </label>
+                                </div>
+                                <div class="control">
+                                    <label for="trail-length">Trail Length</label>
+                                    <div class="value-editor"><input class="value-input" id="trail-length-value" type="number" min="2" max="48" step="1" value="24" aria-label="Trail Length Value"></div>
+                                    <input type="range" id="trail-length" min="2" max="48" step="1" value="24">
+                                </div>
+                                <div class="control">
+                                    <label for="trail-particles">Trail Particles</label>
+                                    <div class="value-editor"><input class="value-input" id="trail-particles-value" type="number" min="200" max="4000" step="100" value="1500" aria-label="Trail Particles Value"></div>
+                                    <input type="range" id="trail-particles" min="200" max="4000" step="100" value="1500">
+                                </div>
+                                <div class="control">
+                                    <label for="trail-opacity">Trail Opacity</label>
+                                    <div class="value-editor"><input class="value-input" id="trail-opacity-value" type="number" min="0" max="100" step="1" value="55" aria-label="Trail Opacity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
+                                    <input type="range" id="trail-opacity" min="0" max="100" step="1" value="55">
+                                </div>
+                            </div>
+                        </div>
                         <div class="control">
                             <label for="visualization-size">Visualization Size</label>
                             <div class="value-editor"><input class="value-input" id="visualization-size-value" type="number" min="25" max="250" step="5" value="100" aria-label="Visualization Size Value"><span class="value-suffix" aria-hidden="true">%</span></div>

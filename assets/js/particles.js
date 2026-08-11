@@ -914,16 +914,25 @@ export class Particle {
     const attractorTraversal = usesDirectAttractorTraversal
       ? 0.32 + energyCurve * 5.18
       : 1;
+    // For chaotic attractors, Movement Amount controls only how tightly the
+    // particle steers toward the mathematical vector field. Movement Speed is
+    // deliberately excluded here so it is not applied twice. The manual speed
+    // control is applied exactly once in the final trajectory traversal step
+    // below, alongside the audio-derived time-dilation multiplier.
     const gain =
       DT *
       (usesDirectAttractorTraversal ? 1 : 0.25 + amplitude * 1.75) *
       amount *
-      speed;
+      (usesDirectAttractorTraversal ? 1 : speed);
 
     this.velocityX = this.velocityX * damping + ax * gain;
     this.velocityY = this.velocityY * damping + ay * gain;
     this.velocityZ = this.velocityZ * damping + az * gain;
 
+    // Chaotic-attractor traversal rate = attractor field baseline × manual
+    // Movement Speed × audio traversal multiplier. The field baseline is
+    // already encoded in writeAttractorAcceleration(); this is the only place
+    // Movement Speed changes how quickly attractor particles advance.
     const positionStep = DT * speed * attractorTraversal;
     this.positionX += this.velocityX * positionStep;
     this.positionY += this.velocityY * positionStep;

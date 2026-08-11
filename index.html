@@ -428,6 +428,26 @@
                                         <option value="radius">Radius — Distance From Center</option>
                                     </select>
                                 </div>
+                                <div class="control">
+                                    <label for="traversal-floor">Traversal Floor</label>
+                                    <div class="value-editor"><input class="value-input" id="traversal-floor-value" type="number" min="0" max="2" step="0.05" value="0.25" aria-label="Traversal Floor Value"><span class="value-suffix" aria-hidden="true">×</span></div>
+                                    <input type="range" id="traversal-floor" min="0" max="2" step="0.05" value="0.25">
+                                </div>
+                                <div class="control">
+                                    <label for="traversal-range">Traversal Range</label>
+                                    <div class="value-editor"><input class="value-input" id="traversal-range-value" type="number" min="0" max="16" step="0.25" value="8" aria-label="Traversal Range Value"><span class="value-suffix" aria-hidden="true">×</span></div>
+                                    <input type="range" id="traversal-range" min="0" max="16" step="0.25" value="8">
+                                </div>
+                                <div class="control">
+                                    <label for="traversal-curve">Traversal Curve</label>
+                                    <div class="value-editor"><input class="value-input" id="traversal-curve-value" type="number" min="0.5" max="4" step="0.1" value="1.8" aria-label="Traversal Curve Value"></div>
+                                    <input type="range" id="traversal-curve" min="0.5" max="4" step="0.1" value="1.8">
+                                </div>
+                                <div class="control">
+                                    <label for="beat-traversal-boost">Beat Impulse</label>
+                                    <div class="value-editor"><input class="value-input" id="beat-traversal-boost-value" type="number" min="0" max="300" step="5" value="60" aria-label="Beat Impulse Value"><span class="value-suffix" aria-hidden="true">%</span></div>
+                                    <input type="range" id="beat-traversal-boost" min="0" max="300" step="5" value="60">
+                                </div>
                                 <div class="control toggle-control">
                                     <label for="attractor-trails">Trails</label>
                                     <label class="switch" for="attractor-trails" aria-label="Attractor trails">

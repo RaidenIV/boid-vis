@@ -41,6 +41,7 @@ function writeLiquidAcceleration(
   movementTime,
   sphereBoundary,
   movement,
+  audioMagnitude,
   noiseX,
   noiseY,
   noiseZ
@@ -128,18 +129,42 @@ function writeLiquidAcceleration(
   const hydrostaticSupport = depth * (1.35 + movement.separation * 0.45);
   const gravity = 0.82;
 
-  // Horizontal container acceleration produces a familiar water-like slosh.
-  // It deliberately avoids a moving 3D target so the fluid no longer behaves
-  // like a suspended blob in zero gravity.
-  const sloshX = Math.sin(movementTime * 0.72) * 0.16;
-  const sloshZ = Math.cos(movementTime * 0.57 + 0.8) * 0.12;
+  // Audio magnitude drives the liquid's container motion and turbulence. Quiet
+  // passages settle under gravity; louder passages slosh harder and develop
+  // visibly stronger local currents without removing the fixed down direction.
+  const audioEnergy = Math.max(0, Math.min(1, audioMagnitude));
+  const turbulenceEnergy = Math.pow(audioEnergy, 0.82);
+  const sloshStrength = 0.025 + turbulenceEnergy * 0.58;
+  const sloshRate = 0.66 + turbulenceEnergy * 1.18;
+  const sloshX = Math.sin(movementTime * sloshRate) * sloshStrength;
+  const sloshZ =
+    Math.cos(movementTime * (sloshRate * 0.79) + 0.8) * sloshStrength * 0.76;
   const horizontalContainment = 0.2 + movement.cohesion * 0.12;
   const surfaceWave =
-    Math.sin((x - z) * 4.2 / Math.max(sphereBoundary, 1e-6) + movementTime * 1.15) *
-    Math.max(0, 1 - depth) * 0.035;
+    Math.sin(
+      (x - z) * 4.2 / Math.max(sphereBoundary, 1e-6) +
+        movementTime * (1.05 + turbulenceEnergy * 1.7)
+    ) *
+    Math.max(0, 1 - depth) *
+    (0.012 + turbulenceEnergy * 0.085);
+
+  // The same simplex field already used by the visualizer becomes liquid
+  // turbulence here. Horizontal churn is intentionally stronger than vertical
+  // churn so the simulation still reads as water under gravity.
+  const horizontalTurbulence = 0.018 + turbulenceEnergy * 0.42;
+  const verticalTurbulence = 0.008 + turbulenceEnergy * 0.16;
+  const eddyPhase = movementTime * (1.7 + turbulenceEnergy * 2.4) + index * 0.019;
+  const eddyX = Math.sin(eddyPhase + z * 0.75) * turbulenceEnergy * 0.09;
+  const eddyZ = Math.cos(eddyPhase * 0.87 + x * 0.75) * turbulenceEnergy * 0.09;
 
   output[0] =
-    pressureX + surfaceX + viscosityX + sloshX - x * horizontalContainment + noiseX * 0.025;
+    pressureX +
+    surfaceX +
+    viscosityX +
+    sloshX +
+    eddyX -
+    x * horizontalContainment +
+    noiseX * horizontalTurbulence;
   output[1] =
     pressureY +
     surfaceY +
@@ -147,9 +172,15 @@ function writeLiquidAcceleration(
     gravity +
     hydrostaticSupport +
     surfaceWave +
-    noiseY * 0.012;
+    noiseY * verticalTurbulence;
   output[2] =
-    pressureZ + surfaceZ + viscosityZ + sloshZ - z * horizontalContainment + noiseZ * 0.025;
+    pressureZ +
+    surfaceZ +
+    viscosityZ +
+    sloshZ +
+    eddyZ -
+    z * horizontalContainment +
+    noiseZ * horizontalTurbulence;
 }
 
 function clampVectorMagnitude(x, y, z, maximum) {
@@ -171,6 +202,7 @@ function writeAttractorAcceleration(
   velocityZ,
   sphereBoundary,
   movement,
+  audioMagnitude,
   noiseX,
   noiseY,
   noiseZ
@@ -266,8 +298,16 @@ function writeAttractorAcceleration(
     thomas: 0.9,
     dadras: 0.18
   }[type] || 0.35;
+  const audioEnergy = Math.max(0, Math.min(1, audioMagnitude));
+  // Audio magnitude changes traversal speed along the vector field itself, not
+  // the shape of the attractor. Quiet passages creep through the path; louder
+  // passages advance substantially faster while remaining on the same flow.
+  const trajectorySpeed = 0.38 + Math.pow(audioEnergy, 0.72) * 2.9;
   const fieldGain =
-    boundary * (0.18 + movement.cohesion * 0.025) * attractorSpeedScale;
+    boundary *
+    (0.18 + movement.cohesion * 0.025) *
+    attractorSpeedScale *
+    trajectorySpeed;
   const desiredVelocityX = dx * fieldGain;
   const desiredVelocityY = dy * fieldGain;
   const desiredVelocityZ = dz * fieldGain;
@@ -308,6 +348,7 @@ function writeModeAcceleration(
   movementTime,
   sphereBoundary,
   movement,
+  audioMagnitude,
   noiseX,
   noiseY,
   noiseZ
@@ -487,6 +528,7 @@ function writeModeAcceleration(
       movementTime,
       sphereBoundary,
       movement,
+      audioMagnitude,
       noiseX,
       noiseY,
       noiseZ
@@ -505,6 +547,7 @@ function writeModeAcceleration(
       velocityZ,
       sphereBoundary,
       movement,
+      audioMagnitude,
       noiseX,
       noiseY,
       noiseZ
@@ -617,6 +660,7 @@ export class Particle {
         movementTime,
         sphereBoundary,
         movement,
+        amplitude,
         noiseX,
         noiseY,
         noiseZ
@@ -636,6 +680,7 @@ export class Particle {
         movementTime,
         sphereBoundary,
         movement,
+        amplitude,
         noiseX,
         noiseY,
         noiseZ
@@ -817,6 +862,7 @@ export class Particle {
         movementTime,
         sphereBoundary,
         movement,
+        amplitude,
         noiseX,
         noiseY,
         noiseZ
@@ -837,6 +883,7 @@ export class Particle {
         this.velocityZ,
         sphereBoundary,
         movement,
+        amplitude,
         noiseX,
         noiseY,
         noiseZ

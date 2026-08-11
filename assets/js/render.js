@@ -30,6 +30,27 @@ const {
 
 let simulationAccumulator = 0;
 let flashPhase = 1;
+let smoothedAttractorEnergy = 0;
+
+const ATTRACTOR_TYPES = new Set([
+  "lorenz",
+  "rossler",
+  "halvorsen",
+  "aizawa",
+  "thomas",
+  "dadras"
+]);
+
+// Display-only rotations chosen so each attractor presents its characteristic
+// structure to the default front camera. Simulation coordinates are untouched.
+const ATTRACTOR_ORIENTATION = Object.freeze({
+  lorenz: [-Math.PI / 2, 0, 0],
+  rossler: [-0.22, 0.08, 0],
+  halvorsen: [-0.48, 0.62, 0],
+  aizawa: [-0.34, 0.12, 0],
+  thomas: [-0.5, 0.62, 0],
+  dadras: [-1.22, 0.18, 0]
+});
 
 state.beatHistory = new Float32Array(BEAT_HISTORY);
 
@@ -48,6 +69,7 @@ export function resetSimulation() {
   state.beatCooldown = 0;
   state.flashAlpha = 0;
   state.cameraFollowAzimuth = 0;
+  smoothedAttractorEnergy = 0;
 }
 
 function triggerBeatFlash() {
@@ -87,15 +109,56 @@ function detectBeat(magnitudes, reactivity) {
   }
 }
 
+function getAttractorOrientation() {
+  return ATTRACTOR_ORIENTATION[state.boidType] || null;
+}
+
+function rotateForAttractorDisplay(x, y, z, orientation) {
+  if (!orientation) return [x, y, z];
+
+  const [rotationX, rotationY, rotationZ] = orientation;
+
+  // X rotation.
+  let cos = Math.cos(rotationX);
+  let sin = Math.sin(rotationX);
+  let nextY = y * cos - z * sin;
+  let nextZ = y * sin + z * cos;
+  y = nextY;
+  z = nextZ;
+
+  // Y rotation.
+  cos = Math.cos(rotationY);
+  sin = Math.sin(rotationY);
+  let nextX = x * cos + z * sin;
+  nextZ = -x * sin + z * cos;
+  x = nextX;
+  z = nextZ;
+
+  // Z rotation.
+  cos = Math.cos(rotationZ);
+  sin = Math.sin(rotationZ);
+  nextX = x * cos - y * sin;
+  nextY = x * sin + y * cos;
+
+  return [nextX, nextY, z];
+}
+
 function updateParticleGeometry() {
   const activeCount = state.activeCount;
   const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
+  const attractorOrientation = getAttractorOrientation();
   for (let index = 0; index < activeCount; index += 1) {
     const particle = particles[index];
     const offset = index * 3;
-    swarm.positions[offset] = particle.positionX * visualizationScale;
-    swarm.positions[offset + 1] = particle.positionY * visualizationScale;
-    swarm.positions[offset + 2] = particle.positionZ * visualizationScale;
+    const [displayX, displayY, displayZ] = rotateForAttractorDisplay(
+      particle.positionX,
+      particle.positionY,
+      particle.positionZ,
+      attractorOrientation
+    );
+    swarm.positions[offset] = displayX * visualizationScale;
+    swarm.positions[offset + 1] = displayY * visualizationScale;
+    swarm.positions[offset + 2] = displayZ * visualizationScale;
     swarm.colors[offset] = particle.colorR;
     swarm.colors[offset + 1] = particle.colorG;
     swarm.colors[offset + 2] = particle.colorB;
@@ -159,6 +222,15 @@ function stepSimulation(stepTime, context) {
   const dynamicNoiseScale = state.noiseScale * (0.125 + sphereMagnitude * 1.125);
   const dynamicSphereBoundary =
     state.sphereBoundary * (1.0 + sphereMagnitude * 0.7);
+  const usesAttractorSimulation =
+    ATTRACTOR_TYPES.has(state.boidType) ||
+    (state.boidType === "morph" && state.morphScope === "attractors");
+  // Do not let bass-driven container expansion rescale the mathematical state
+  // space. That changes the equations' effective coordinates and deforms the
+  // attractor. Boid/liquid modes keep the existing reactive boundary.
+  const simulationBoundary = usesAttractorSimulation
+    ? state.sphereBoundary
+    : dynamicSphereBoundary;
 
   const stopsA = COLORMAPS[state.cmapA].stops;
   const stopsB = COLORMAPS[state.cmapB].stops;
@@ -185,7 +257,7 @@ function stepSimulation(stepTime, context) {
       state.time,
       amplitude,
       dynamicNoiseScale,
-      dynamicSphereBoundary,
+      simulationBoundary,
       state.damping,
       movement
     );
@@ -195,7 +267,7 @@ function stepSimulation(stepTime, context) {
         particle.positionY * particle.positionY +
         particle.positionZ * particle.positionZ
     );
-    const normalizedDistance = Math.min(distance / dynamicSphereBoundary, 1.0);
+    const normalizedDistance = Math.min(distance / simulationBoundary, 1.0);
 
     const colorA = sampleColormap(stopsA, normalizedDistance);
     const colorB = sampleColormap(stopsB, normalizedDistance);
@@ -309,12 +381,21 @@ export function renderFrame(deltaTime, playing) {
 
   const avgMagnitude = Math.min(1, rawAverage * reactivity);
   const sphereMagnitude = Math.min(1, state.lowFreqMagnitude * reactivity);
-  // Chaotic-attractor traversal follows full-spectrum normalized loudness, not
-  // only the low-frequency magnitude used by the sphere/bloom reactions.
-  const trajectoryMagnitude = Math.min(
-    1,
-    Math.max(0, Number(state.spectralEnergy) || rawAverage) * reactivity
+  // Chaotic attractors use smoothed full-spectrum energy as a bounded time
+  // dilation signal. Attack is quick enough to feel musical; release is slower
+  // so particle speed does not chatter frame-to-frame and destroy the shape.
+  const trajectoryTarget = clamp(
+    Math.max(0, Number(state.spectralEnergy) || rawAverage) * reactivity,
+    0,
+    1
   );
+  const trajectoryTimeConstant =
+    trajectoryTarget > smoothedAttractorEnergy ? 0.08 : 0.32;
+  const trajectoryResponse =
+    1 - Math.exp(-Math.max(0.001, deltaTime) / trajectoryTimeConstant);
+  smoothedAttractorEnergy +=
+    (trajectoryTarget - smoothedAttractorEnergy) * trajectoryResponse;
+  const trajectoryMagnitude = clamp(smoothedAttractorEnergy, 0, 1);
   const brightness =
     (isActive ? 0.25 + sphereMagnitude * 0.95 : 0.25) *
     (state.brightness / 100);

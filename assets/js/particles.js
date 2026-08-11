@@ -299,10 +299,12 @@ function writeAttractorAcceleration(
     dadras: 0.18
   }[type] || 0.35;
   const audioEnergy = Math.max(0, Math.min(1, audioMagnitude));
-  // Loudness directly scales the first-order velocity along the attractor
-  // field. Use a wide range so the speed difference is perceptually obvious:
-  // near-silence creeps along the path while loud sections race through it.
-  const trajectorySpeed = 0.12 + Math.pow(audioEnergy, 1.05) * 7.4;
+  // Audio changes the rate at which particles advance through the existing
+  // vector field rather than changing the equations themselves. Keep this
+  // bounded: overly aggressive time-scaling distorts chaotic trajectories.
+  // The smoothed energy supplied by render.js gives a clear quiet-to-loud
+  // difference without making the attractor numerically unstable.
+  const trajectorySpeed = 0.55 + Math.pow(audioEnergy, 0.78) * 2.15;
   const fieldGain =
     boundary *
     (0.18 + movement.cohesion * 0.025) *
@@ -311,26 +313,27 @@ function writeAttractorAcceleration(
   const desiredVelocityX = dx * fieldGain;
   const desiredVelocityY = dy * fieldGain;
   const desiredVelocityZ = dz * fieldGain;
-  // Increase tracking authority with loudness so the particle velocity can
-  // actually reach the louder target speed instead of damping away the effect.
-  const steering = 1.55 + movement.alignment * 0.45 + audioEnergy * 3.15;
-  const particleOffset = ((index % 97) / 96 - 0.5) * 0.018;
+  // Keep steering independent of loudness. Audio should time-dilate traversal,
+  // not change how strongly particles are pulled toward the field, because the
+  // latter visibly deforms the attractor at high levels.
+  const steering = 1.2 + movement.alignment * 0.4;
+  const particleOffset = ((index % 97) / 96 - 0.5) * 0.004;
   const normalizedRadius = Math.sqrt(nx * nx + ny * ny + nz * nz);
   const softContainment = Math.max(0, normalizedRadius - 1.08) * 1.9;
 
   output[0] =
     (desiredVelocityX - velocityX) * steering +
-    noiseX * 0.018 +
+    noiseX * 0.004 +
     particleOffset -
     nx * softContainment;
   output[1] =
     (desiredVelocityY - velocityY) * steering +
-    noiseY * 0.018 -
+    noiseY * 0.004 -
     particleOffset * 0.5 -
     ny * softContainment;
   output[2] =
     (desiredVelocityZ - velocityZ) * steering +
-    noiseZ * 0.018 +
+    noiseZ * 0.004 +
     particleOffset * 0.35 -
     nz * softContainment;
 }

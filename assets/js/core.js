@@ -214,6 +214,14 @@ export const elements = {
 
   // Chaotic attractors
   attractorColorSource: byId("attractor-color-source"),
+  traversalFloor: byId("traversal-floor"),
+  traversalFloorValue: byId("traversal-floor-value"),
+  traversalRange: byId("traversal-range"),
+  traversalRangeValue: byId("traversal-range-value"),
+  traversalCurve: byId("traversal-curve"),
+  traversalCurveValue: byId("traversal-curve-value"),
+  beatTraversalBoost: byId("beat-traversal-boost"),
+  beatTraversalBoostValue: byId("beat-traversal-boost-value"),
   attractorTrails: byId("attractor-trails"),
   trailLength: byId("trail-length"),
   trailLengthValue: byId("trail-length-value"),

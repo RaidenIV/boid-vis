@@ -8,7 +8,14 @@
 import { engine } from "./config.js";
 import { SimplexNoise } from "./noise.js";
 
-const { DT, PARTICLE_POOL, TRAIL_MAX_LENGTH, TRAIL_PARTICLE_CAP } = engine;
+const {
+  DT,
+  PARTICLE_POOL,
+  TRAIL_MAX_LENGTH,
+  TRAIL_PARTICLE_CAP,
+  ATTRACTOR_MAX_POSITION_STEP,
+  ATTRACTOR_MAX_SUBSTEPS
+} = engine;
 const FLOCK_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127]);
 const LIQUID_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127, 509, 2039, 8191, 16381]);
 const BOID_SIMULATION_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit", "liquid"]);
@@ -1122,14 +1129,25 @@ export class Particle {
       Math.min(1, movement.audioMagnitude ?? amplitude)
     );
     // Make loudness affect the distance travelled along the already-computed
-    // attractor tangent, not the field itself. A smoothstep curve gives quiet
-    // passages a deliberate crawl and lets loud passages move up to ~5.5x the
-    // normal path distance immediately, which is visually obvious without
-    // changing the attractor's equations or orientation.
-    const energyCurve =
-      attractorEnergy * attractorEnergy * (3 - 2 * attractorEnergy);
+    // attractor tangent, not the field itself, so the equations and their
+    // orientation are never deformed by level.
+    //
+    // The curve is a gamma rather than the previous smoothstep. Smoothstep has
+    // zero derivative at both ends, so it was least sensitive exactly where the
+    // signal spends most of its time — a 4x amplitude jump between sections
+    // produced only a 1.63x traversal jump. An exponent above 1 expands loud
+    // contrast; below 1 expands quiet detail.
+    const traversalCurve = Math.max(0.05, movement.traversalCurve ?? 1.8);
+    const energyCurve = Math.pow(attractorEnergy, traversalCurve);
+    const beatBoost =
+      (movement.beatImpulse ?? 0) * (movement.beatTraversalBoost ?? 0);
     const attractorTraversal = usesDirectAttractorTraversal
-      ? 0.32 + energyCurve * 5.18
+      ? Math.max(
+          0,
+          (movement.traversalFloor ?? 0.25) +
+            energyCurve * (movement.traversalRange ?? 8) +
+            beatBoost
+        )
       : 1;
     // For chaotic attractors, Movement Amount controls only how tightly the
     // particle steers toward the mathematical vector field. Movement Speed is
@@ -1142,18 +1160,75 @@ export class Particle {
       amount *
       (usesDirectAttractorTraversal ? 1 : speed);
 
-    this.velocityX = this.velocityX * damping + ax * gain;
-    this.velocityY = this.velocityY * damping + ay * gain;
-    this.velocityZ = this.velocityZ * damping + az * gain;
-
     // Chaotic-attractor traversal rate = attractor field baseline × manual
     // Movement Speed × audio traversal multiplier. The field baseline is
     // already encoded in writeAttractorAcceleration(); this is the only place
     // Movement Speed changes how quickly attractor particles advance.
     const positionStep = DT * speed * attractorTraversal;
-    this.positionX += this.velocityX * positionStep;
-    this.positionY += this.velocityY * positionStep;
-    this.positionZ += this.velocityZ * positionStep;
+
+    // Loud passages advance the position so far per step that the steered
+    // velocity lags the field, and the manifold visibly swells — measured at
+    // 1.7x mean radius from quiet to loud on the unmodified build. This is not
+    // Euler truncation error; it is the steering model, so the fix is to hold
+    // velocity relaxations per unit of path advanced constant rather than to
+    // subdivide for accuracy.
+    const needsSubStepping =
+      ATTRACTOR_TYPE_SET.has(movement.type) &&
+      positionStep > ATTRACTOR_MAX_POSITION_STEP;
+
+    if (needsSubStepping) {
+      const subSteps = Math.min(
+        ATTRACTOR_MAX_SUBSTEPS,
+        Math.ceil(positionStep / ATTRACTOR_MAX_POSITION_STEP)
+      );
+      // Full gain and full damping per sub-step — deliberately NOT divided.
+      // The quantity that shapes the manifold is velocity relaxations per unit
+      // of path advanced. Dividing them would preserve the ratio that causes
+      // the deformation; keeping them at full strength restores one relaxation
+      // per nominal step of travel, which is what holds the geometry fixed.
+      const subGain = gain;
+      const subPositionStep = positionStep / subSteps;
+      const subDamping = damping;
+
+      for (let subStep = 0; subStep < subSteps; subStep += 1) {
+        writeAttractorAcceleration(
+          ATTRACTOR_ACCEL,
+          movement.type,
+          index,
+          this.positionX,
+          this.positionY,
+          this.positionZ,
+          this.velocityX,
+          this.velocityY,
+          this.velocityZ,
+          sphereBoundary,
+          movement,
+          movement.audioMagnitude ?? amplitude,
+          noiseX,
+          noiseY,
+          noiseZ
+        );
+
+        this.velocityX =
+          this.velocityX * subDamping + ATTRACTOR_ACCEL[0] * subGain;
+        this.velocityY =
+          this.velocityY * subDamping + ATTRACTOR_ACCEL[1] * subGain;
+        this.velocityZ =
+          this.velocityZ * subDamping + ATTRACTOR_ACCEL[2] * subGain;
+
+        this.positionX += this.velocityX * subPositionStep;
+        this.positionY += this.velocityY * subPositionStep;
+        this.positionZ += this.velocityZ * subPositionStep;
+      }
+    } else {
+      this.velocityX = this.velocityX * damping + ax * gain;
+      this.velocityY = this.velocityY * damping + ay * gain;
+      this.velocityZ = this.velocityZ * damping + az * gain;
+
+      this.positionX += this.velocityX * positionStep;
+      this.positionY += this.velocityY * positionStep;
+      this.positionZ += this.velocityZ * positionStep;
+    }
 
     const usesAttractorBounds =
       ATTRACTOR_TYPE_SET.has(movement.type) ||

@@ -59,6 +59,10 @@ export const defaults = Object.freeze({
 
   // Chaotic attractors
   attractorColorSource: "speed",
+  traversalFloor: 0.25,
+  traversalRange: 8.0,
+  traversalCurve: 1.8,
+  beatTraversalBoost: 60,
   attractorTrails: true,
   trailLength: 24,
   trailParticles: 1500,
@@ -103,6 +107,7 @@ export const PERSISTED_SETTING_KEYS = Object.freeze([
   "boidAlignment", "boidCohesion", "boidSeparation", "visualizationSize",
   "minParticles", "maxParticles", "particleSize", "particleOpacity", "noiseScale", "damping", "sphereBoundary",
   "attractorColorSource", "attractorTrails", "trailLength", "trailParticles", "trailOpacity",
+  "traversalFloor", "traversalRange", "traversalCurve", "beatTraversalBoost",
   "bloomBase", "bloomGain", "bloomRadius", "bloomThreshold",
   "lockedCmapIndex", "cycleSpeed", "brightness",
   "beatFlashEnabled", "beatFlashIntensity", "beatSensitivity",
@@ -149,7 +154,13 @@ export const engine = Object.freeze({
   // Silent sub-steps walked by a single leader particle when entering an
   // attractor mode, so the first visible frame is already a formed manifold
   // instead of a collapsing ball.
-  ATTRACTOR_PREWARM_BURN_IN: 600
+  ATTRACTOR_PREWARM_BURN_IN: 600,
+  // Explicit Euler blurs the manifold once the per-sub-step distance grows.
+  // Above this, the attractor field is re-evaluated multiple times per step.
+  ATTRACTOR_MAX_POSITION_STEP: 0.0875,
+  ATTRACTOR_MAX_SUBSTEPS: 8,
+  // Decay of the per-beat traversal impulse, in simulation seconds.
+  BEAT_IMPULSE_DECAY: 0.18
 });
 
 export const FREQ_BANDS = Object.freeze([

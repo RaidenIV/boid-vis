@@ -253,6 +253,16 @@ export async function analyzeAudioBuffer(
   );
   const trackPeak = Math.max(0.05, sortedOverall[percentileIndex] || 0.05);
 
+  // Low anchor for attractor traversal. `overall` is a mean of dB-domain band
+  // values, so a track occupies a narrow, elevated slice of 0..1 and dividing
+  // by the peak alone maps that slice into the bottom of the control range.
+  // Anchoring both ends rescales whatever range the track actually uses.
+  const floorIndex = Math.min(
+    sortedOverall.length - 1,
+    Math.max(0, Math.floor(sortedOverall.length * 0.10))
+  );
+  const overallFloor = Math.max(0, sortedOverall[floorIndex] || 0);
+
   // Precompute a time-based adaptive reference so preview and deterministic
   // export use the same gain envelope at a given source timestamp.
   const frameDelta = 1 / Math.max(1, fps);
@@ -270,7 +280,7 @@ export async function analyzeAudioBuffer(
   onProgress(1);
   return {
     fps, frameCount, bands, low, flux, centroid, overall, adaptivePeak,
-    trackPeak, duration
+    trackPeak, overallFloor, duration
   };
 }
 
@@ -326,8 +336,17 @@ export function sampleAnalysisAtTime(seconds) {
   // a poor speed control. Keep a separate track-relative energy signal so a
   // quiet passage stays quiet and a loud passage produces a visibly faster
   // traversal regardless of the selected amplitude-normalization mode.
-  const attractorReference = Math.max(0.04, analysis.trackPeak || 0.04);
-  state.attractorEnergy = clamp(rawOverall / attractorReference, 0, 1);
+  const attractorPeak = Math.max(0.04, analysis.trackPeak || 0.04);
+  const attractorFloor = Math.min(
+    Math.max(0, Number(analysis.overallFloor) || 0),
+    attractorPeak * 0.9
+  );
+  const attractorSpan = Math.max(0.02, attractorPeak - attractorFloor);
+  state.attractorEnergy = clamp(
+    (rawOverall - attractorFloor) / attractorSpan,
+    0,
+    1
+  );
   state.adaptiveReference = analysis.adaptivePeak?.[frameIndex] || 0;
 }
 

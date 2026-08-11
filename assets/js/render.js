@@ -40,7 +40,8 @@ const {
   FLASH_DURATION,
   RENDER_SCALE,
   PARTICLE_POOL,
-  ATTRACTOR_PREWARM_BURN_IN
+  ATTRACTOR_PREWARM_BURN_IN,
+  BEAT_IMPULSE_DECAY
 } = engine;
 
 let simulationAccumulator = 0;
@@ -51,6 +52,10 @@ let smoothedAttractorEnergy = 0;
 // palette does not breathe between phrases.
 let attractorSpeedReference = 1;
 let previousActiveCount = 0;
+// Short decaying kick on top of the smoothed loudness envelope. The envelope's
+// 320 ms release deliberately suppresses per-hit chatter, which also makes
+// individual beats invisible; this restores them without destabilising shape.
+let beatImpulse = 0;
 
 const ATTRACTOR_TYPES = new Set([
   "lorenz",
@@ -96,6 +101,7 @@ export function resetSimulation() {
   smoothedAttractorEnergy = 0;
   attractorSpeedReference = 1;
   previousActiveCount = 0;
+  beatImpulse = 0;
   resetTrails();
 }
 
@@ -132,6 +138,9 @@ function detectBeat(magnitudes, reactivity) {
   state.beatCooldown = Math.max(0, state.beatCooldown - 1);
   if (bassEnergy > threshold && bassEnergy > 0.25 && state.beatCooldown === 0) {
     triggerBeatFlash();
+    // Deliberately not gated on beatFlashEnabled: turning off the white flash
+    // is not a request to turn off beat-reactive motion.
+    beatImpulse = 1;
     state.beatCooldown = BEAT_COOLDOWN_FRAMES;
   }
 }
@@ -159,7 +168,12 @@ function buildMovement(audioMagnitude) {
     alignment: state.boidAlignment / 100,
     cohesion: state.boidCohesion / 100,
     separation: state.boidSeparation / 100,
-    audioMagnitude
+    audioMagnitude,
+    traversalFloor: state.traversalFloor,
+    traversalRange: state.traversalRange,
+    traversalCurve: state.traversalCurve,
+    beatTraversalBoost: state.beatTraversalBoost / 100,
+    beatImpulse
   };
 }
 
@@ -177,7 +191,10 @@ function buildMovement(audioMagnitude) {
  */
 function prewarmAttractor(boundary) {
   const count = Math.max(1, Math.min(state.maxParticles, PARTICLE_POOL));
-  const movement = buildMovement(0.35);
+  // Neutral descriptor. buildMovement() closes over the live beat impulse, and
+  // re-seeding while a beat is still ringing would otherwise warm the leader at
+  // a boosted traversal and produce a different manifold each time.
+  const movement = { ...buildMovement(0.35), beatImpulse: 0 };
   const noiseScale = state.noiseScale * 0.5;
   const jitter = boundary * 0.006;
   const leader = particles[0];
@@ -221,6 +238,7 @@ function prewarmAttractor(boundary) {
 export function reseedForCurrentMode() {
   const boundary = state.sphereBoundary;
   previousActiveCount = 0;
+  beatImpulse = 0;
 
   if (!isAttractorMode()) {
     reseedParticles(boundary);
@@ -426,6 +444,11 @@ function stepSimulation(stepTime, context) {
   } = context;
 
   state.time += stepTime;
+
+  // Decayed in simulation time, not frame time, so the impulse envelope is
+  // identical at 24 fps export and 60 fps preview.
+  beatImpulse *= Math.exp(-stepTime / BEAT_IMPULSE_DECAY);
+  if (beatImpulse < 1e-4) beatImpulse = 0;
 
   // Colormap cycling.
   const cycleRate = isActive ? 0.08 + sphereMagnitude * 0.42 : 0.06;

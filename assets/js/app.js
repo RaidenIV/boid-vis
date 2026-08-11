@@ -161,6 +161,10 @@ function bindControls() {
 
   // Chaotic attractors
   bindSelect(elements.attractorColorSource, "attractorColorSource");
+  bindRange(elements.traversalFloor, elements.traversalFloorValue, "traversalFloor");
+  bindRange(elements.traversalRange, elements.traversalRangeValue, "traversalRange");
+  bindRange(elements.traversalCurve, elements.traversalCurveValue, "traversalCurve");
+  bindRange(elements.beatTraversalBoost, elements.beatTraversalBoostValue, "beatTraversalBoost");
   bindToggle(elements.attractorTrails, "attractorTrails");
   bindRange(elements.trailLength, elements.trailLengthValue, "trailLength");
   bindRange(elements.trailParticles, elements.trailParticlesValue, "trailParticles");

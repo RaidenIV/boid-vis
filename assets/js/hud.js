@@ -12,6 +12,27 @@ function titleCase(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+
+const SIMULATION_LABELS = Object.freeze({
+  flow: "Flow",
+  flock: "Flock",
+  swarm: "Swarm",
+  vortex: "Vortex",
+  orbit: "Orbit",
+  liquid: "Liquid",
+  lorenz: "Lorenz",
+  rossler: "Rössler",
+  halvorsen: "Halvorsen",
+  aizawa: "Aizawa",
+  thomas: "Thomas",
+  dadras: "Dadras",
+  morph: "Morph"
+});
+
+function simulationLabel(value) {
+  return SIMULATION_LABELS[value] || titleCase(value);
+}
+
 function getViewportLabel() {
   return viewportPresets[state.viewportPreset]?.label || "Fill Window";
 }
@@ -78,7 +99,7 @@ export function drawHud(context, width, height) {
     "PARTICLE VISUALIZER / SYSTEM HUD",
     fileName,
     `${state.isExportingVideo ? "EXPORT" : state.isPlaying ? "PLAY" : "PAUSE"}  ${formatTime(current)} / ${formatTime(duration)}`,
-    `BOID ${titleCase(state.boidType)}  /  CAMERA ${titleCase(state.cameraPreset)}`,
+    `SIMULATION ${simulationLabel(state.boidType)}  /  CAMERA ${titleCase(state.cameraPreset)}`,
     `AMPLITUDE ${titleCase(state.amplitudeMode)}  /  ${getViewportLabel()}`
   ];
 

@@ -41,6 +41,7 @@ export const defaults = Object.freeze({
   // Particles
   reactivity: 100,
   boidType: "flow",
+  morphScope: "all",
   morphSpeed: 1.0,
   movementSpeed: 1.0,
   movementAmount: 100,
@@ -91,7 +92,7 @@ export const PERSISTED_SETTING_KEYS = Object.freeze([
   "cameraPreset", "cameraSpeed", "cameraAmount", "cameraDistance", "cameraElevation", "cameraAzimuth",
   "hudEnabled", "hudOpacity", "hudScale",
   "qualityPreset", "renderPixelRatioLimit",
-  "reactivity", "boidType", "morphSpeed", "movementSpeed", "movementAmount",
+  "reactivity", "boidType", "morphScope", "morphSpeed", "movementSpeed", "movementAmount",
   "boidAlignment", "boidCohesion", "boidSeparation", "visualizationSize",
   "minParticles", "maxParticles", "particleSize", "particleOpacity", "noiseScale", "damping", "sphereBoundary",
   "bloomBase", "bloomGain", "bloomRadius", "bloomThreshold",

@@ -19,7 +19,8 @@ const ENUMS = {
   viewportPreset: new Set(["fill", "landscape", "square", "portrait"]),
   cameraPreset: new Set(["static", "orbit", "figure8", "pushPull", "drift", "spectralCentroid"]),
   qualityPreset: new Set(["custom", "performance", "balanced", "high", "maximum", "auto"]),
-  boidType: new Set(["flow", "flock", "swarm", "vortex", "orbit", "liquid", "morph"]),
+  boidType: new Set(["flow", "flock", "swarm", "vortex", "orbit", "liquid", "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras", "morph"]),
+  morphScope: new Set(["all", "boids", "attractors"]),
   videoResolution: new Set(["1080", "2k", "4k"]),
   videoFileType: new Set(["mp4", "mkv"])
 };

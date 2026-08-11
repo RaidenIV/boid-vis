@@ -179,6 +179,8 @@ export const elements = {
   reactivity: byId("reactivity-slider"),
   reactivityValue: byId("reactivity-value"),
   boidType: byId("boid-type"),
+  morphScopeControl: byId("morph-scope-control"),
+  morphScope: byId("morph-scope"),
   morphSpeedControl: byId("morph-speed-control"),
   morphSpeed: byId("morph-speed"),
   morphSpeedValue: byId("morph-speed-value"),

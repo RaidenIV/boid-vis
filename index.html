@@ -343,17 +343,17 @@
                             <div class="value-editor"><input class="value-input" id="reactivity-value" type="number" min="10" max="300" step="1" value="100" aria-label="Reactivity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
                             <input type="range" id="reactivity-slider" min="10" max="300" step="1" value="100">
                         </div>
-                        <div class="control-cluster is-collapsed" data-collapsible-title="Boid Movement">
+                        <div class="control-cluster is-collapsed" data-collapsible-title="Simulation Types">
                             <div class="collapsible-header">
-                                <h3>Boid Movement</h3>
+                                <h3>Simulation Types</h3>
                                 <div class="collapsible-header-actions">
-                                    <button class="section-reset" data-reset-section="boids" title="Reset Boid Movement to defaults" aria-label="Reset Boid Movement to defaults" type="button">↺</button>
-                                    <button class="collapse-toggle" aria-controls="clusterBoids" aria-expanded="false" title="Expand Boid Movement" aria-label="Expand Boid Movement" type="button">+</button>
+                                    <button class="section-reset" data-reset-section="boids" title="Reset Simulation Types to defaults" aria-label="Reset Simulation Types to defaults" type="button">↺</button>
+                                    <button class="collapse-toggle" aria-controls="clusterBoids" aria-expanded="false" title="Expand Simulation Types" aria-label="Expand Simulation Types" type="button">+</button>
                                 </div>
                             </div>
                             <div class="collapsible-content" id="clusterBoids">
                                 <div class="control">
-                                    <label for="boid-type">Boid Type</label>
+                                    <label for="boid-type">Simulation Type</label>
                                     <select id="boid-type">
                                         <option value="flow" selected>Flow — Original</option>
                                         <option value="flock">Flock</option>
@@ -361,7 +361,21 @@
                                         <option value="vortex">Vortex</option>
                                         <option value="orbit">Orbit</option>
                                         <option value="liquid">Liquid</option>
-                                        <option value="morph">Morph — All Types</option>
+                                        <option value="lorenz">Attractor — Lorenz</option>
+                                        <option value="rossler">Attractor — Rössler</option>
+                                        <option value="halvorsen">Attractor — Halvorsen</option>
+                                        <option value="aizawa">Attractor — Aizawa</option>
+                                        <option value="thomas">Attractor — Thomas</option>
+                                        <option value="dadras">Attractor — Dadras</option>
+                                        <option value="morph">Morph</option>
+                                    </select>
+                                </div>
+                                <div class="control" id="morph-scope-control" hidden>
+                                    <label for="morph-scope">Morph Between</label>
+                                    <select id="morph-scope">
+                                        <option value="all" selected>All Simulation Types</option>
+                                        <option value="boids">Boid Simulations Only</option>
+                                        <option value="attractors">Chaotic Attractors Only</option>
                                     </select>
                                 </div>
                                 <div class="control" id="morph-speed-control" hidden>

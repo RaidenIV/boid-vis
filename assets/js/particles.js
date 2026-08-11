@@ -1,21 +1,30 @@
 /**
- * particles.js — particle movement engine.
+ * particles.js — particle simulation engine.
  *
  * "flow" preserves the original noise-field motion exactly at default values.
- * The additional boid modes reuse the same particle pool and confinement model
- * while adding lightweight steering rules that remain practical at high counts.
+ * Boid, liquid, and chaotic-attractor simulations reuse the same particle pool
+ * and deterministic simulation clock so preview and export stay in sync.
  */
 import { engine } from "./config.js";
 import { SimplexNoise } from "./noise.js";
 
 const { DT, PARTICLE_POOL } = engine;
 const FLOCK_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127]);
-const LIQUID_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127, 509, 2039]);
-const MORPH_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit", "liquid"]);
+const LIQUID_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127, 509, 2039, 8191, 16381]);
+const BOID_SIMULATION_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit", "liquid"]);
+const ATTRACTOR_TYPES = Object.freeze(["lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras"]);
+const ATTRACTOR_TYPE_SET = new Set(ATTRACTOR_TYPES);
+const ALL_MORPH_TYPES = Object.freeze([...BOID_SIMULATION_TYPES, ...ATTRACTOR_TYPES]);
+const MORPH_TYPE_GROUPS = Object.freeze({
+  all: ALL_MORPH_TYPES,
+  boids: BOID_SIMULATION_TYPES,
+  attractors: ATTRACTOR_TYPES
+});
 const MORPH_SECONDS_PER_TYPE = 4;
 const MORPH_ACCEL_A = new Float64Array(3);
 const MORPH_ACCEL_B = new Float64Array(3);
 const LIQUID_ACCEL = new Float64Array(3);
+const ATTRACTOR_ACCEL = new Float64Array(3);
 
 
 function writeLiquidAcceleration(
@@ -47,10 +56,11 @@ function writeLiquidAcceleration(
   let averageVelocityZ = 0;
   let weightTotal = 0;
 
-  // A sampled-neighbor SPH-style approximation keeps the mode practical even
-  // at the visualizer's maximum particle count. Separation acts as pressure,
-  // alignment as viscosity, and cohesion as surface tension.
-  const interactionRadius = Math.max(0.08, sphereBoundary * 0.5);
+  // Sampled-neighbor SPH-style pressure/viscosity. Unlike the previous
+  // zero-gravity droplet behavior, this mode has a real down direction and a
+  // hydrostatic restoring force so the liquid settles into the lower portion
+  // of the spherical container and develops a horizontal free surface.
+  const interactionRadius = Math.max(0.08, sphereBoundary * 0.38);
   const inverseInteractionRadius = 1 / interactionRadius;
 
   if (activeCount > 1) {
@@ -70,9 +80,8 @@ function writeLiquidAcceleration(
       const q = 1 - distance * inverseInteractionRadius;
       const weight = q * q;
       const inverseDistance = 1 / distance;
+      const pressure = weight * (0.32 + movement.separation * 1.1);
 
-      // Short-range pressure prevents the cohesive fluid mass from collapsing.
-      const pressure = weight * (0.38 + movement.separation * 0.9);
       pressureX -= dx * inverseDistance * pressure;
       pressureY -= dy * inverseDistance * pressure;
       pressureZ -= dz * inverseDistance * pressure;
@@ -103,43 +112,185 @@ function writeLiquidAcceleration(
     averageVelocityY *= inverseWeight;
     averageVelocityZ *= inverseWeight;
 
-    surfaceX = (centerX - x) * movement.cohesion * 0.52;
-    surfaceY = (centerY - y) * movement.cohesion * 0.52;
-    surfaceZ = (centerZ - z) * movement.cohesion * 0.52;
+    const surfaceStrength = movement.cohesion * 0.34;
+    surfaceX = (centerX - x) * surfaceStrength;
+    surfaceY = (centerY - y) * surfaceStrength;
+    surfaceZ = (centerZ - z) * surfaceStrength;
 
-    viscosityX = (averageVelocityX - velocityX) * movement.alignment * 0.82;
-    viscosityY = (averageVelocityY - velocityY) * movement.alignment * 0.82;
-    viscosityZ = (averageVelocityZ - velocityZ) * movement.alignment * 0.82;
+    const viscosityStrength = 1.15 + movement.alignment * 1.15;
+    viscosityX = (averageVelocityX - velocityX) * viscosityStrength;
+    viscosityY = (averageVelocityY - velocityY) * viscosityStrength;
+    viscosityZ = (averageVelocityZ - velocityZ) * viscosityStrength;
   }
 
-  // Move the body of fluid around a low, slowly shifting center to create
-  // slosh and droplet deformation rather than flock-like directional travel.
-  const sloshRadius = sphereBoundary * 0.22;
-  const targetX = Math.sin(movementTime * 0.63) * sloshRadius;
-  const targetY =
-    -sphereBoundary * 0.16 + Math.sin(movementTime * 0.41 + 1.2) * sloshRadius * 0.16;
-  const targetZ = Math.cos(movementTime * 0.53) * sloshRadius;
-  const bodyStrength = 0.14 + movement.cohesion * 0.12;
+  const freeSurfaceY = -sphereBoundary * 0.04;
+  const depth = Math.max(0, freeSurfaceY - y) / Math.max(sphereBoundary, 1e-6);
+  const hydrostaticSupport = depth * (1.35 + movement.separation * 0.45);
+  const gravity = 0.82;
+
+  // Horizontal container acceleration produces a familiar water-like slosh.
+  // It deliberately avoids a moving 3D target so the fluid no longer behaves
+  // like a suspended blob in zero gravity.
+  const sloshX = Math.sin(movementTime * 0.72) * 0.16;
+  const sloshZ = Math.cos(movementTime * 0.57 + 0.8) * 0.12;
+  const horizontalContainment = 0.2 + movement.cohesion * 0.12;
+  const surfaceWave =
+    Math.sin((x - z) * 4.2 / Math.max(sphereBoundary, 1e-6) + movementTime * 1.15) *
+    Math.max(0, 1 - depth) * 0.035;
 
   output[0] =
-    pressureX +
-    surfaceX +
-    viscosityX +
-    (targetX - x) * bodyStrength +
-    noiseX * 0.12;
+    pressureX + surfaceX + viscosityX + sloshX - x * horizontalContainment + noiseX * 0.025;
   output[1] =
     pressureY +
     surfaceY +
-    viscosityY +
-    (targetY - y) * bodyStrength -
-    0.11 +
-    noiseY * 0.09;
+    viscosityY -
+    gravity +
+    hydrostaticSupport +
+    surfaceWave +
+    noiseY * 0.012;
   output[2] =
-    pressureZ +
-    surfaceZ +
-    viscosityZ +
-    (targetZ - z) * bodyStrength +
-    noiseZ * 0.12;
+    pressureZ + surfaceZ + viscosityZ + sloshZ - z * horizontalContainment + noiseZ * 0.025;
+}
+
+function clampVectorMagnitude(x, y, z, maximum) {
+  const length = Math.sqrt(x * x + y * y + z * z);
+  if (length <= maximum || length <= 1e-9) return [x, y, z];
+  const scale = maximum / length;
+  return [x * scale, y * scale, z * scale];
+}
+
+function writeAttractorAcceleration(
+  output,
+  type,
+  index,
+  x,
+  y,
+  z,
+  velocityX,
+  velocityY,
+  velocityZ,
+  sphereBoundary,
+  movement,
+  noiseX,
+  noiseY,
+  noiseZ
+) {
+  const boundary = Math.max(sphereBoundary, 1e-6);
+  const nx = x / boundary;
+  const ny = y / boundary;
+  const nz = z / boundary;
+
+  let dx = 0;
+  let dy = 0;
+  let dz = 0;
+
+  if (type === "lorenz") {
+    const X = nx * 20;
+    const Y = ny * 30;
+    const Z = (nz + 1) * 25;
+    const sigma = 10;
+    const rho = 28;
+    const beta = 8 / 3;
+    dx = (sigma * (Y - X)) / 20;
+    dy = (X * (rho - Z) - Y) / 30;
+    dz = (X * Y - beta * Z) / 25;
+  } else if (type === "rossler") {
+    const X = nx * 28;
+    const Y = ny * 28;
+    const Z = (nz + 1) * 18;
+    const a = 0.2;
+    const b = 0.2;
+    const c = 5.7;
+    dx = (-Y - Z) / 28;
+    dy = (X + a * Y) / 28;
+    dz = (b + Z * (X - c)) / 18;
+  } else if (type === "halvorsen") {
+    const X = nx * 15;
+    const Y = ny * 15;
+    const Z = nz * 15;
+    const a = 1.4;
+    dx = (-a * X - 4 * Y - 4 * Z - Y * Y) / 15;
+    dy = (-a * Y - 4 * Z - 4 * X - Z * Z) / 15;
+    dz = (-a * Z - 4 * X - 4 * Y - X * X) / 15;
+  } else if (type === "aizawa") {
+    const X = nx * 1.5;
+    const Y = ny * 1.5;
+    const Z = (nz + 1) * 1.0;
+    const a = 0.95;
+    const b = 0.7;
+    const c = 0.6;
+    const d = 3.5;
+    const e = 0.25;
+    const f = 0.1;
+    dx = ((Z - b) * X - d * Y) / 1.5;
+    dy = (d * X + (Z - b) * Y) / 1.5;
+    dz =
+      c +
+      a * Z -
+      (Z * Z * Z) / 3 -
+      (X * X + Y * Y) * (1 + e * Z) +
+      f * Z * X * X * X;
+  } else if (type === "thomas") {
+    const X = nx * 6;
+    const Y = ny * 6;
+    const Z = nz * 6;
+    const b = 0.208186;
+    dx = (Math.sin(Y) - b * X) / 6;
+    dy = (Math.sin(Z) - b * Y) / 6;
+    dz = (Math.sin(X) - b * Z) / 6;
+  } else if (type === "dadras") {
+    const X = nx * 9;
+    const Y = ny * 9;
+    const Z = (nz + 1) * 7;
+    const a = 3;
+    const b = 2.7;
+    const c = 1.7;
+    const d = 2;
+    const e = 9;
+    dx = (Y - a * X + b * Y * Z) / 9;
+    dy = (c * Y - X * Z + Z) / 9;
+    dz = (d * X * Y - e * Z) / 7;
+  }
+
+  [dx, dy, dz] = clampVectorMagnitude(dx, dy, dz, 4.25);
+
+  // Treat the mathematical vector field as a desired first-order velocity.
+  // Steering toward that velocity preserves each attractor's characteristic
+  // path while still fitting the visualizer's existing damping/audio-reactive
+  // integration model and allowing smooth interpolation in Morph mode.
+  const attractorSpeedScale = {
+    lorenz: 0.55,
+    rossler: 0.28,
+    halvorsen: 0.14,
+    aizawa: 0.16,
+    thomas: 0.9,
+    dadras: 0.18
+  }[type] || 0.35;
+  const fieldGain =
+    boundary * (0.18 + movement.cohesion * 0.025) * attractorSpeedScale;
+  const desiredVelocityX = dx * fieldGain;
+  const desiredVelocityY = dy * fieldGain;
+  const desiredVelocityZ = dz * fieldGain;
+  const steering = 1.15 + movement.alignment * 0.45;
+  const particleOffset = ((index % 97) / 96 - 0.5) * 0.018;
+  const normalizedRadius = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  const softContainment = Math.max(0, normalizedRadius - 1.08) * 1.9;
+
+  output[0] =
+    (desiredVelocityX - velocityX) * steering +
+    noiseX * 0.018 +
+    particleOffset -
+    nx * softContainment;
+  output[1] =
+    (desiredVelocityY - velocityY) * steering +
+    noiseY * 0.018 -
+    particleOffset * 0.5 -
+    ny * softContainment;
+  output[2] =
+    (desiredVelocityZ - velocityZ) * steering +
+    noiseZ * 0.018 +
+    particleOffset * 0.35 -
+    nz * softContainment;
 }
 
 function writeModeAcceleration(
@@ -341,6 +492,24 @@ function writeModeAcceleration(
       noiseZ
     );
     return;
+  } else if (ATTRACTOR_TYPE_SET.has(type)) {
+    writeAttractorAcceleration(
+      output,
+      type,
+      index,
+      x,
+      y,
+      z,
+      velocityX,
+      velocityY,
+      velocityZ,
+      sphereBoundary,
+      movement,
+      noiseX,
+      noiseY,
+      noiseZ
+    );
+    return;
   }
 
   output[0] = ax;
@@ -422,19 +591,20 @@ export class Particle {
     let az = noiseZ;
 
     if (movement.type === "morph") {
+      const morphTypes = MORPH_TYPE_GROUPS[movement.morphScope] || ALL_MORPH_TYPES;
       const rawPhase =
         (time * movement.morphSpeed) / MORPH_SECONDS_PER_TYPE;
       const wrappedPhase =
-        ((rawPhase % MORPH_TYPES.length) + MORPH_TYPES.length) %
-        MORPH_TYPES.length;
+        ((rawPhase % morphTypes.length) + morphTypes.length) %
+        morphTypes.length;
       const typeIndex = Math.floor(wrappedPhase);
-      const nextTypeIndex = (typeIndex + 1) % MORPH_TYPES.length;
+      const nextTypeIndex = (typeIndex + 1) % morphTypes.length;
       const linearMix = wrappedPhase - typeIndex;
       const smoothMix = linearMix * linearMix * (3 - 2 * linearMix);
 
       writeModeAcceleration(
         MORPH_ACCEL_A,
-        MORPH_TYPES[typeIndex],
+        morphTypes[typeIndex],
         index,
         pool,
         activeCount,
@@ -453,7 +623,7 @@ export class Particle {
       );
       writeModeAcceleration(
         MORPH_ACCEL_B,
-        MORPH_TYPES[nextTypeIndex],
+        morphTypes[nextTypeIndex],
         index,
         pool,
         activeCount,
@@ -654,6 +824,26 @@ export class Particle {
       ax = LIQUID_ACCEL[0];
       ay = LIQUID_ACCEL[1];
       az = LIQUID_ACCEL[2];
+    } else if (ATTRACTOR_TYPE_SET.has(movement.type)) {
+      writeAttractorAcceleration(
+        ATTRACTOR_ACCEL,
+        movement.type,
+        index,
+        x,
+        y,
+        z,
+        this.velocityX,
+        this.velocityY,
+        this.velocityZ,
+        sphereBoundary,
+        movement,
+        noiseX,
+        noiseY,
+        noiseZ
+      );
+      ax = ATTRACTOR_ACCEL[0];
+      ay = ATTRACTOR_ACCEL[1];
+      az = ATTRACTOR_ACCEL[2];
     }
 
     // At the defaults, Flow uses the original gain expression exactly.
@@ -667,28 +857,75 @@ export class Particle {
     this.positionY += this.velocityY * DT * speed;
     this.positionZ += this.velocityZ * DT * speed;
 
-    // Elastic reflection off the confinement sphere.
-    const distanceSquared =
-      this.positionX * this.positionX +
-      this.positionY * this.positionY +
-      this.positionZ * this.positionZ;
-    const distance = Math.sqrt(distanceSquared);
+    const usesAttractorBounds =
+      ATTRACTOR_TYPE_SET.has(movement.type) ||
+      (movement.type === "morph" && movement.morphScope === "attractors");
 
-    if (distance > sphereBoundary) {
-      const factor = sphereBoundary / distance;
-      this.positionX *= factor;
-      this.positionY *= factor;
-      this.positionZ *= factor;
+    if (usesAttractorBounds) {
+      // Chaotic attractors are defined in Cartesian state spaces. A spherical
+      // projection clips their lobes and rings, so keep them inside the same
+      // nominal size with per-axis bounds instead.
+      const limit = sphereBoundary * 1.35;
+      if (this.positionX > limit) {
+        this.positionX = limit;
+        if (this.velocityX > 0) this.velocityX *= -0.28;
+      } else if (this.positionX < -limit) {
+        this.positionX = -limit;
+        if (this.velocityX < 0) this.velocityX *= -0.28;
+      }
+      if (this.positionY > limit) {
+        this.positionY = limit;
+        if (this.velocityY > 0) this.velocityY *= -0.28;
+      } else if (this.positionY < -limit) {
+        this.positionY = -limit;
+        if (this.velocityY < 0) this.velocityY *= -0.28;
+      }
+      if (this.positionZ > limit) {
+        this.positionZ = limit;
+        if (this.velocityZ > 0) this.velocityZ *= -0.28;
+      } else if (this.positionZ < -limit) {
+        this.positionZ = -limit;
+        if (this.velocityZ < 0) this.velocityZ *= -0.28;
+      }
+    } else {
+      // Boid simulations retain the original spherical confinement model.
+      const distanceSquared =
+        this.positionX * this.positionX +
+        this.positionY * this.positionY +
+        this.positionZ * this.positionZ;
+      const distance = Math.sqrt(distanceSquared);
 
-      const nx = this.positionX / sphereBoundary;
-      const ny = this.positionY / sphereBoundary;
-      const nz = this.positionZ / sphereBoundary;
-      const dot =
-        this.velocityX * nx + this.velocityY * ny + this.velocityZ * nz;
+      if (distance > sphereBoundary) {
+        const factor = sphereBoundary / distance;
+        this.positionX *= factor;
+        this.positionY *= factor;
+        this.positionZ *= factor;
 
-      this.velocityX -= 2 * dot * nx;
-      this.velocityY -= 2 * dot * ny;
-      this.velocityZ -= 2 * dot * nz;
+        const nx = this.positionX / sphereBoundary;
+        const ny = this.positionY / sphereBoundary;
+        const nz = this.positionZ / sphereBoundary;
+        const dot =
+          this.velocityX * nx + this.velocityY * ny + this.velocityZ * nz;
+
+        if (movement.type === "liquid") {
+          // Water loses energy against the container instead of elastically
+          // ricocheting around it. Keep tangential motion for visible sloshing
+          // while heavily damping the outward normal component.
+          if (dot > 0) {
+            const restitution = 0.08;
+            this.velocityX -= (1 + restitution) * dot * nx;
+            this.velocityY -= (1 + restitution) * dot * ny;
+            this.velocityZ -= (1 + restitution) * dot * nz;
+          }
+          this.velocityX *= 0.86;
+          this.velocityY *= 0.72;
+          this.velocityZ *= 0.86;
+        } else {
+          this.velocityX -= 2 * dot * nx;
+          this.velocityY -= 2 * dot * ny;
+          this.velocityZ -= 2 * dot * nz;
+        }
+      }
     }
   }
 }

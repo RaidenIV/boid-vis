@@ -116,12 +116,15 @@ function bindControls() {
 
   // Particles
   bindRange(elements.reactivity, elements.reactivityValue, "reactivity");
-  const updateMorphSpeedVisibility = () => {
-    elements.morphSpeedControl.hidden = state.boidType !== "morph";
+  const updateMorphControlsVisibility = () => {
+    const isMorph = state.boidType === "morph";
+    elements.morphScopeControl.hidden = !isMorph;
+    elements.morphSpeedControl.hidden = !isMorph;
   };
-  bindSelect(elements.boidType, "boidType", updateMorphSpeedVisibility);
+  bindSelect(elements.boidType, "boidType", updateMorphControlsVisibility);
+  bindSelect(elements.morphScope, "morphScope");
   bindRange(elements.morphSpeed, elements.morphSpeedValue, "morphSpeed");
-  updateMorphSpeedVisibility();
+  updateMorphControlsVisibility();
   bindRange(elements.movementSpeed, elements.movementSpeedValue, "movementSpeed");
   bindRange(elements.movementAmount, elements.movementAmountValue, "movementAmount");
   bindRange(elements.boidAlignment, elements.boidAlignmentValue, "boidAlignment");

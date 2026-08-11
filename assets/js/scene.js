@@ -11,7 +11,12 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { defaults, engine } from "./config.js";
 import { elements } from "./core.js";
 
-const { BLOOM_LAYER, PARTICLE_POOL } = engine;
+const {
+  BLOOM_LAYER,
+  PARTICLE_POOL,
+  TRAIL_MAX_LENGTH,
+  TRAIL_PARTICLE_CAP
+} = engine;
 
 export const canvas = elements.canvas;
 
@@ -137,6 +142,48 @@ export const particleMaterial = new THREE.PointsMaterial({
 export const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
 particleSystem.layers.enable(BLOOM_LAYER);
 scene.add(particleSystem);
+
+/* ---------------------------------------------------------------------------
+   Attractor trail ribbons
+
+   An attractor is a trajectory; a point cloud only samples it. These line
+   segments carry the curve itself. Buffers are allocated once for the worst
+   case — the trail controls only change how much of them is walked per frame,
+   and setDrawRange keeps the rest out of the draw call.
+--------------------------------------------------------------------------- */
+const TRAIL_VERTEX_CAPACITY = TRAIL_PARTICLE_CAP * (TRAIL_MAX_LENGTH - 1) * 2;
+
+export const trailBuffers = {
+  positions: new Float32Array(TRAIL_VERTEX_CAPACITY * 3),
+  colors: new Float32Array(TRAIL_VERTEX_CAPACITY * 3)
+};
+
+export const trailGeometry = new THREE.BufferGeometry();
+trailGeometry.setAttribute(
+  "position",
+  new THREE.BufferAttribute(trailBuffers.positions, 3)
+);
+trailGeometry.setAttribute(
+  "color",
+  new THREE.BufferAttribute(trailBuffers.colors, 3)
+);
+trailGeometry.setDrawRange(0, 0);
+
+export const trailMaterial = new THREE.LineBasicMaterial({
+  vertexColors: true,
+  transparent: true,
+  opacity: defaults.trailOpacity / 100,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+export const trailSystem = new THREE.LineSegments(trailGeometry, trailMaterial);
+trailSystem.layers.enable(BLOOM_LAYER);
+// Positions are rewritten every frame, so a cached bounding sphere would cull
+// the whole object as soon as the swarm moves.
+trailSystem.frustumCulled = false;
+trailSystem.visible = false;
+scene.add(trailSystem);
 
 /* ---------------------------------------------------------------------------
    Sizing

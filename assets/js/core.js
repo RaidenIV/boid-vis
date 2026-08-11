@@ -212,6 +212,16 @@ export const elements = {
   sphereBoundary: byId("sphere-boundary"),
   sphereBoundaryValue: byId("sphere-boundary-value"),
 
+  // Chaotic attractors
+  attractorColorSource: byId("attractor-color-source"),
+  attractorTrails: byId("attractor-trails"),
+  trailLength: byId("trail-length"),
+  trailLengthValue: byId("trail-length-value"),
+  trailParticles: byId("trail-particles"),
+  trailParticlesValue: byId("trail-particles-value"),
+  trailOpacity: byId("trail-opacity"),
+  trailOpacityValue: byId("trail-opacity-value"),
+
   // Bloom
   bloomBase: byId("bloom-base"),
   bloomBaseValue: byId("bloom-base-value"),

@@ -7,9 +7,8 @@ import {
 import { elements, state } from "./core.js";
 import { setControlValue, syncColormapButtons } from "./controls.js";
 import { updateLoopSelectionUi } from "./loop.js";
-import { reseedParticles } from "./particles.js";
 import { applyVolume, updateLoopButtonState } from "./playback.js";
-import { resetSimulation } from "./render.js";
+import { reseedForCurrentMode, resetSimulation } from "./render.js";
 import { clamp } from "./utils.js";
 import { fitViewport } from "./viewport.js";
 
@@ -21,6 +20,7 @@ const ENUMS = {
   qualityPreset: new Set(["custom", "performance", "balanced", "high", "maximum", "auto"]),
   boidType: new Set(["flow", "flock", "swarm", "vortex", "orbit", "liquid", "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras", "morph"]),
   morphScope: new Set(["all", "boids", "attractors"]),
+  attractorColorSource: new Set(["speed", "radius", "lobe"]),
   videoResolution: new Set(["1080", "2k", "4k"]),
   videoFileType: new Set(["mp4", "mkv"])
 };
@@ -31,7 +31,8 @@ const NUMERIC_SELECTS = {
 };
 
 const BOOLEAN_KEYS = new Set([
-  "muted", "audioLoop", "hudEnabled", "beatFlashEnabled", "loopSnap"
+  "muted", "audioLoop", "hudEnabled", "beatFlashEnabled", "loopSnap",
+  "attractorTrails"
 ]);
 
 export function getSerializableSettings() {
@@ -159,7 +160,7 @@ export async function applySettingsSnapshot(settings) {
   updateLoopSelectionUi();
   updateLoopButtonState();
   applyVolume();
-  reseedParticles(state.sphereBoundary);
+  reseedForCurrentMode();
   resetSimulation();
   fitViewport();
 

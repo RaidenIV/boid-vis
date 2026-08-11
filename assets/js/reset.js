@@ -10,8 +10,7 @@ import {
   updateLoopSelectionUi
 } from "./loop.js";
 import { applyVolume, updateLoopButtonState } from "./playback.js";
-import { reseedParticles } from "./particles.js";
-import { resetSimulation } from "./render.js";
+import { reseedForCurrentMode, resetSimulation } from "./render.js";
 import { updateVideoExportFormatUi } from "./export.js";
 import { fitViewport } from "./viewport.js";
 import { beginHistory, commitHistory } from "./history.js";
@@ -40,6 +39,13 @@ const sectionKeys = {
     "boidCohesion",
     "boidSeparation"
   ],
+  attractors: [
+    "attractorColorSource",
+    "attractorTrails",
+    "trailLength",
+    "trailParticles",
+    "trailOpacity"
+  ],
   particles: [
     "reactivity",
     "boidType",
@@ -57,7 +63,12 @@ const sectionKeys = {
     "particleOpacity",
     "noiseScale",
     "damping",
-    "sphereBoundary"
+    "sphereBoundary",
+    "attractorColorSource",
+    "attractorTrails",
+    "trailLength",
+    "trailParticles",
+    "trailOpacity"
   ],
   bloom: ["bloomBase", "bloomGain", "bloomRadius", "bloomThreshold"],
   color: ["cycleSpeed", "brightness"],
@@ -132,7 +143,7 @@ export function resetSection(section, { record = true } = {}) {
       updateLoopButtonState();
     }
     if (section === "particles") {
-      reseedParticles(state.sphereBoundary);
+      reseedForCurrentMode();
     }
     if (section === "performance") {
       state.renderPixelRatioLimit = defaults.renderPixelRatioLimit;
@@ -155,7 +166,7 @@ export function resetAll() {
     elements.exportFileName.value = "";
     applyVolume();
     updateLoopButtonState();
-    reseedParticles(state.sphereBoundary);
+    reseedForCurrentMode();
     resetSimulation();
   } finally {
     commitHistory("Reset all");

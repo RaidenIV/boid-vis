@@ -9,14 +9,27 @@
  */
 import { COLORMAPS, engine } from "./config.js";
 import { state } from "./core.js";
-import { particles } from "./particles.js";
+import {
+  copyParticleWithJitter,
+  particles,
+  reseedParticles,
+  resetTrails,
+  sampleTrails,
+  seedAttractorPoint,
+  spawnFromManifold,
+  trails
+} from "./particles.js";
 import {
   camera,
   particleGeometry,
   particleMaterial,
   renderScene,
   swarm,
-  bloomPass
+  bloomPass,
+  trailBuffers,
+  trailGeometry,
+  trailMaterial,
+  trailSystem
 } from "./scene.js";
 import { clamp, sampleColormap } from "./utils.js";
 
@@ -25,12 +38,19 @@ const {
   BEAT_HISTORY,
   BEAT_COOLDOWN_FRAMES,
   FLASH_DURATION,
-  RENDER_SCALE
+  RENDER_SCALE,
+  PARTICLE_POOL,
+  ATTRACTOR_PREWARM_BURN_IN
 } = engine;
 
 let simulationAccumulator = 0;
 let flashPhase = 1;
 let smoothedAttractorEnergy = 0;
+// Running peak of attractor particle speed, used to normalize speed-based
+// colour. Fast attack so a burst registers immediately, slow release so the
+// palette does not breathe between phrases.
+let attractorSpeedReference = 1;
+let previousActiveCount = 0;
 
 const ATTRACTOR_TYPES = new Set([
   "lorenz",
@@ -52,6 +72,10 @@ const ATTRACTOR_ORIENTATION = Object.freeze({
   dadras: [-1.22, 0.18, 0]
 });
 
+// Morph/attractors has no single field to seed from; Lorenz is the basin used
+// for the initial blob because it is the first entry in the morph rotation.
+const ATTRACTOR_SEED_MORPH_TYPE = "lorenz";
+
 state.beatHistory = new Float32Array(BEAT_HISTORY);
 
 /** Clear all time-varying simulation state. */
@@ -70,6 +94,9 @@ export function resetSimulation() {
   state.flashAlpha = 0;
   state.cameraFollowAzimuth = 0;
   smoothedAttractorEnergy = 0;
+  attractorSpeedReference = 1;
+  previousActiveCount = 0;
+  resetTrails();
 }
 
 function triggerBeatFlash() {
@@ -113,8 +140,114 @@ function getAttractorOrientation() {
   return ATTRACTOR_ORIENTATION[state.boidType] || null;
 }
 
-function rotateForAttractorDisplay(x, y, z, orientation) {
-  if (!orientation) return [x, y, z];
+/** True when the current selection runs the chaotic-attractor integrator. */
+function isAttractorMode() {
+  return (
+    ATTRACTOR_TYPES.has(state.boidType) ||
+    (state.boidType === "morph" && state.morphScope === "attractors")
+  );
+}
+
+/** The movement descriptor handed to Particle.update(). */
+function buildMovement(audioMagnitude) {
+  return {
+    type: state.boidType,
+    morphScope: state.morphScope,
+    morphSpeed: state.morphSpeed,
+    speed: state.movementSpeed,
+    amount: state.movementAmount / 100,
+    alignment: state.boidAlignment / 100,
+    cohesion: state.boidCohesion / 100,
+    separation: state.boidSeparation / 100,
+    audioMagnitude
+  };
+}
+
+/**
+ * Walk one leader particle from the seed point and drop the rest of the pool
+ * along its path, so every particle starts exactly on the manifold and the
+ * attractor is fully formed on the first visible frame.
+ *
+ * Letting a blob spread on its own is prettier in principle, but it only works
+ * where the leading Lyapunov exponent is large. Rossler, Aizawa and Thomas
+ * diverge roughly an order of magnitude more slowly than Lorenz and would sit
+ * as a bright dot for the better part of a minute. Distributing by arc-time
+ * gives the same on-manifold result immediately, for every attractor, and costs
+ * one particle's worth of integration instead of the whole pool's.
+ */
+function prewarmAttractor(boundary) {
+  const count = Math.max(1, Math.min(state.maxParticles, PARTICLE_POOL));
+  const movement = buildMovement(0.35);
+  const noiseScale = state.noiseScale * 0.5;
+  const jitter = boundary * 0.006;
+  const leader = particles[0];
+  let time = 0;
+
+  const stepLeader = () => {
+    time += BASE_FRAME_TIME;
+    leader.update(
+      0,
+      particles,
+      1,
+      time,
+      0.35,
+      noiseScale,
+      boundary,
+      state.damping,
+      movement
+    );
+  };
+
+  // Burn-in: get the leader off the seed point and onto the attractor.
+  for (let step = 0; step < ATTRACTOR_PREWARM_BURN_IN; step += 1) {
+    stepLeader();
+  }
+
+  // Then one further step per particle, laying the pool down along the path.
+  for (let index = 1; index < count; index += 1) {
+    stepLeader();
+    copyParticleWithJitter(index, leader, jitter);
+  }
+
+  // History accumulated during the warm-up would draw as one long streak.
+  resetTrails();
+}
+
+/**
+ * Re-seed the pool for whatever simulation is selected. Attractor modes get a
+ * seed point plus a leader-path pre-warm, so they open as a formed manifold.
+ * Every other mode keeps the original uniform sphere seeding exactly.
+ */
+export function reseedForCurrentMode() {
+  const boundary = state.sphereBoundary;
+  previousActiveCount = 0;
+
+  if (!isAttractorMode()) {
+    reseedParticles(boundary);
+    resetTrails();
+    return;
+  }
+
+  const type =
+    state.boidType === "morph" ? ATTRACTOR_SEED_MORPH_TYPE : state.boidType;
+  seedAttractorPoint(boundary, type);
+  prewarmAttractor(boundary);
+}
+
+const DISPLAY_POINT = new Float64Array(3);
+
+/**
+ * Apply the display-only orientation for the current attractor, writing into a
+ * shared buffer. Trails multiply the number of transformed points per frame, so
+ * this deliberately allocates nothing.
+ */
+function writeDisplayPoint(output, x, y, z, orientation) {
+  if (!orientation) {
+    output[0] = x;
+    output[1] = y;
+    output[2] = z;
+    return;
+  }
 
   const [rotationX, rotationY, rotationZ] = orientation;
 
@@ -140,7 +273,9 @@ function rotateForAttractorDisplay(x, y, z, orientation) {
   nextX = x * cos - y * sin;
   nextY = x * sin + y * cos;
 
-  return [nextX, nextY, z];
+  output[0] = nextX;
+  output[1] = nextY;
+  output[2] = z;
 }
 
 function updateParticleGeometry() {
@@ -150,15 +285,16 @@ function updateParticleGeometry() {
   for (let index = 0; index < activeCount; index += 1) {
     const particle = particles[index];
     const offset = index * 3;
-    const [displayX, displayY, displayZ] = rotateForAttractorDisplay(
+    writeDisplayPoint(
+      DISPLAY_POINT,
       particle.positionX,
       particle.positionY,
       particle.positionZ,
       attractorOrientation
     );
-    swarm.positions[offset] = displayX * visualizationScale;
-    swarm.positions[offset + 1] = displayY * visualizationScale;
-    swarm.positions[offset + 2] = displayZ * visualizationScale;
+    swarm.positions[offset] = DISPLAY_POINT[0] * visualizationScale;
+    swarm.positions[offset + 1] = DISPLAY_POINT[1] * visualizationScale;
+    swarm.positions[offset + 2] = DISPLAY_POINT[2] * visualizationScale;
     swarm.colors[offset] = particle.colorR;
     swarm.colors[offset + 1] = particle.colorG;
     swarm.colors[offset + 2] = particle.colorB;
@@ -167,6 +303,112 @@ function updateParticleGeometry() {
   particleGeometry.attributes.position.needsUpdate = true;
   particleGeometry.attributes.color.needsUpdate = true;
   particleGeometry.setDrawRange(0, activeCount);
+}
+
+/** Mark a span of a buffer attribute dirty without re-uploading the whole thing. */
+function markAttributeRange(attribute, floatCount) {
+  attribute.updateRange.offset = 0;
+  attribute.updateRange.count = floatCount;
+  attribute.needsUpdate = true;
+}
+
+/**
+ * Build the trail line segments from the ring buffer, newest sample first.
+ * Segment colour tapers toward black with age; under additive blending that
+ * reads as a fade, without needing per-vertex alpha.
+ */
+function updateTrailGeometry() {
+  const enabled = state.attractorTrails && isAttractorMode();
+  const requestedLength = Math.round(state.trailLength);
+  const available = Math.min(trails.length, trails.sampleCount);
+  const length = Math.min(Math.max(2, requestedLength), available);
+
+  if (!enabled || length < 2) {
+    trailSystem.visible = false;
+    trailGeometry.setDrawRange(0, 0);
+    return;
+  }
+
+  const tracked = Math.min(
+    state.activeCount,
+    trails.capacity,
+    Math.round(state.trailParticles)
+  );
+  if (tracked < 1) {
+    trailSystem.visible = false;
+    trailGeometry.setDrawRange(0, 0);
+    return;
+  }
+
+  const segments = length - 1;
+  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
+  const orientation = getAttractorOrientation();
+  const positions = trailBuffers.positions;
+  const colors = trailBuffers.colors;
+  const history = trails.history;
+  const stride = trails.length;
+  const newest = (trails.writeIndex - 1 + stride) % stride;
+
+  let vertex = 0;
+  for (let index = 0; index < tracked; index += 1) {
+    const particle = particles[index];
+    const base = index * stride * 3;
+    let previousX = 0;
+    let previousY = 0;
+    let previousZ = 0;
+
+    for (let step = 0; step < length; step += 1) {
+      const slot = (newest - step + stride * 2) % stride;
+      const offset = base + slot * 3;
+      writeDisplayPoint(
+        DISPLAY_POINT,
+        history[offset],
+        history[offset + 1],
+        history[offset + 2],
+        orientation
+      );
+      const pointX = DISPLAY_POINT[0] * visualizationScale;
+      const pointY = DISPLAY_POINT[1] * visualizationScale;
+      const pointZ = DISPLAY_POINT[2] * visualizationScale;
+
+      if (step > 0) {
+        // Squared falloff keeps the head bright and lets the tail die quickly,
+        // which stops dense regions from smearing into a solid block.
+        const nearFade = 1 - (step - 1) / segments;
+        const farFade = 1 - step / segments;
+        const nearWeight = nearFade * nearFade;
+        const farWeight = farFade * farFade;
+
+        let writeOffset = vertex * 3;
+        positions[writeOffset] = previousX;
+        positions[writeOffset + 1] = previousY;
+        positions[writeOffset + 2] = previousZ;
+        colors[writeOffset] = particle.colorR * nearWeight;
+        colors[writeOffset + 1] = particle.colorG * nearWeight;
+        colors[writeOffset + 2] = particle.colorB * nearWeight;
+        vertex += 1;
+
+        writeOffset = vertex * 3;
+        positions[writeOffset] = pointX;
+        positions[writeOffset + 1] = pointY;
+        positions[writeOffset + 2] = pointZ;
+        colors[writeOffset] = particle.colorR * farWeight;
+        colors[writeOffset + 1] = particle.colorG * farWeight;
+        colors[writeOffset + 2] = particle.colorB * farWeight;
+        vertex += 1;
+      }
+
+      previousX = pointX;
+      previousY = pointY;
+      previousZ = pointZ;
+    }
+  }
+
+  markAttributeRange(trailGeometry.attributes.position, vertex * 3);
+  markAttributeRange(trailGeometry.attributes.color, vertex * 3);
+  trailGeometry.setDrawRange(0, vertex);
+  trailMaterial.opacity = state.trailOpacity / 100;
+  trailSystem.visible = vertex > 0;
 }
 
 /**
@@ -215,8 +457,12 @@ function stepSimulation(stepTime, context) {
     state.minParticles,
     state.maxParticles
   );
+  const grownBy = state.activeCount - previousActiveCount;
 
-  if (!isActive) return;
+  if (!isActive) {
+    previousActiveCount = state.activeCount;
+    return;
+  }
 
   const amplitude = clamp(sphereMagnitude, 0, 1);
   const dynamicNoiseScale = state.noiseScale * (0.125 + sphereMagnitude * 1.125);
@@ -236,17 +482,28 @@ function stepSimulation(stepTime, context) {
   const stopsB = COLORMAPS[state.cmapB].stops;
   const mix = state.cmapMix;
 
-  const movement = {
-    type: state.boidType,
-    morphScope: state.morphScope,
-    morphSpeed: state.morphSpeed,
-    speed: state.movementSpeed,
-    amount: state.movementAmount / 100,
-    alignment: state.boidAlignment / 100,
-    cohesion: state.boidCohesion / 100,
-    separation: state.boidSeparation / 100,
-    audioMagnitude: trajectoryMagnitude
-  };
+  const movement = buildMovement(trajectoryMagnitude);
+
+  // Newly activated particles otherwise pop in wherever they were left. Seed
+  // them from a particle already on the manifold so a rising particle count
+  // reads as the attractor densifying rather than debris flying in.
+  if (usesAttractorSimulation && grownBy > 0 && previousActiveCount > 0) {
+    for (
+      let index = previousActiveCount;
+      index < state.activeCount;
+      index += 1
+    ) {
+      spawnFromManifold(index, previousActiveCount, simulationBoundary);
+    }
+  }
+  previousActiveCount = state.activeCount;
+
+  const colorSource = usesAttractorSimulation
+    ? state.attractorColorSource
+    : "radius";
+  const lobeScale = Math.max(simulationBoundary * 0.45, 1e-6);
+  const speedScale = Math.max(attractorSpeedReference, 1e-4);
+  let frameMaxSpeed = 0;
 
   for (let index = 0; index < state.activeCount; index += 1) {
     const particle = particles[index];
@@ -269,12 +526,47 @@ function stepSimulation(stepTime, context) {
     );
     const normalizedDistance = Math.min(distance / simulationBoundary, 1.0);
 
-    const colorA = sampleColormap(stopsA, normalizedDistance);
-    const colorB = sampleColormap(stopsB, normalizedDistance);
+    // Radial distance is the right colour channel for boids, but on an
+    // attractor it paints concentric shells: Lorenz's two wings sit at nearly
+    // identical radii, so they receive identical colour and the structure
+    // disappears. Speed and lobe membership both track the actual geometry.
+    let colorPosition = normalizedDistance;
+    if (colorSource === "speed") {
+      const speed = Math.sqrt(
+        particle.velocityX * particle.velocityX +
+          particle.velocityY * particle.velocityY +
+          particle.velocityZ * particle.velocityZ
+      );
+      if (speed > frameMaxSpeed) frameMaxSpeed = speed;
+      colorPosition = clamp(speed / speedScale, 0, 1);
+    } else if (colorSource === "lobe") {
+      colorPosition = clamp(
+        0.5 + 0.5 * Math.tanh(particle.positionX / lobeScale),
+        0,
+        1
+      );
+    }
+
+    const colorA = sampleColormap(stopsA, colorPosition);
+    const colorB = sampleColormap(stopsB, colorPosition);
 
     particle.colorR = (colorA[0] + (colorB[0] - colorA[0]) * mix) * brightness;
     particle.colorG = (colorA[1] + (colorB[1] - colorA[1]) * mix) * brightness;
     particle.colorB = (colorA[2] + (colorB[2] - colorA[2]) * mix) * brightness;
+  }
+
+  if (colorSource === "speed") {
+    // One sub-step of lag, which is imperceptible and keeps this to a single
+    // pass over the pool.
+    const target = Math.max(frameMaxSpeed, 1e-4);
+    const rate = target > attractorSpeedReference ? 0.25 : 0.02;
+    attractorSpeedReference += (target - attractorSpeedReference) * rate;
+  }
+
+  // Sampled inside the fixed sub-step, never once per rendered frame, so trail
+  // spacing is identical at 24 fps export and 60 fps preview.
+  if (state.attractorTrails && usesAttractorSimulation) {
+    sampleTrails(state.activeCount);
   }
 
   detectBeat(state.magnitudes, reactivity);
@@ -433,6 +725,7 @@ export function renderFrame(deltaTime, playing) {
   bloomPass.threshold = state.bloomThreshold;
 
   updateParticleGeometry();
+  updateTrailGeometry();
   updateCamera(deltaTime, playing);
   renderScene();
 }

@@ -57,6 +57,13 @@ export const defaults = Object.freeze({
   damping: 0.95,
   sphereBoundary: 1.0,
 
+  // Chaotic attractors
+  attractorColorSource: "speed",
+  attractorTrails: true,
+  trailLength: 24,
+  trailParticles: 1500,
+  trailOpacity: 55,
+
   // Bloom
   bloomBase: 0.6,
   bloomGain: 3.2,
@@ -95,6 +102,7 @@ export const PERSISTED_SETTING_KEYS = Object.freeze([
   "reactivity", "boidType", "morphScope", "morphSpeed", "movementSpeed", "movementAmount",
   "boidAlignment", "boidCohesion", "boidSeparation", "visualizationSize",
   "minParticles", "maxParticles", "particleSize", "particleOpacity", "noiseScale", "damping", "sphereBoundary",
+  "attractorColorSource", "attractorTrails", "trailLength", "trailParticles", "trailOpacity",
   "bloomBase", "bloomGain", "bloomRadius", "bloomThreshold",
   "lockedCmapIndex", "cycleSpeed", "brightness",
   "beatFlashEnabled", "beatFlashIntensity", "beatSensitivity",
@@ -133,7 +141,15 @@ export const engine = Object.freeze({
   BEAT_COOLDOWN_FRAMES: 14,
   FLASH_DURATION: 0.38,
   ANALYSIS_FPS: 60,
-  BASE_FRAME_TIME: 0.016
+  BASE_FRAME_TIME: 0.016,
+  // Chaotic-attractor trails. The ring buffer is allocated for the worst case
+  // once; the controls only change how much of it is walked each frame.
+  TRAIL_MAX_LENGTH: 48,
+  TRAIL_PARTICLE_CAP: 4000,
+  // Silent sub-steps walked by a single leader particle when entering an
+  // attractor mode, so the first visible frame is already a formed manifold
+  // instead of a collapsing ball.
+  ATTRACTOR_PREWARM_BURN_IN: 600
 });
 
 export const FREQ_BANDS = Object.freeze([

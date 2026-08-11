@@ -8,7 +8,7 @@
 import { engine } from "./config.js";
 import { SimplexNoise } from "./noise.js";
 
-const { DT, PARTICLE_POOL } = engine;
+const { DT, PARTICLE_POOL, TRAIL_MAX_LENGTH, TRAIL_PARTICLE_CAP } = engine;
 const FLOCK_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127]);
 const LIQUID_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127, 509, 2039, 8191, 16381]);
 const BOID_SIMULATION_TYPES = Object.freeze(["flow", "flock", "swarm", "vortex", "orbit", "liquid"]);
@@ -25,6 +25,212 @@ const MORPH_ACCEL_A = new Float64Array(3);
 const MORPH_ACCEL_B = new Float64Array(3);
 const LIQUID_ACCEL = new Float64Array(3);
 const ATTRACTOR_ACCEL = new Float64Array(3);
+
+/**
+ * Deterministic 32-bit integer hash in [0, 1). Used everywhere a particle needs
+ * a "random" offset, because Math.random() would desynchronise the video export
+ * pass from the preview it is supposed to reproduce.
+ */
+function hash01(value) {
+  let x = Math.imul(value ^ 0x9e3779b9, 0x85ebca6b);
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+/* ---------------------------------------------------------------------------
+   Trail history
+
+   One flat ring buffer for the first TRAIL_PARTICLE_CAP particles. All tracked
+   particles share a single write cursor because sampleTrails() appends one
+   sample for all of them at once, from inside the fixed simulation sub-step —
+   which is what keeps a 24 fps export identical to a 60 fps preview.
+--------------------------------------------------------------------------- */
+export const trails = {
+  history: new Float32Array(TRAIL_PARTICLE_CAP * TRAIL_MAX_LENGTH * 3),
+  writeIndex: 0,
+  sampleCount: 0,
+  capacity: TRAIL_PARTICLE_CAP,
+  length: TRAIL_MAX_LENGTH
+};
+
+/** Drop all trail history. Trails rebuild over the next TRAIL_MAX_LENGTH steps. */
+export function resetTrails() {
+  trails.history.fill(0);
+  trails.writeIndex = 0;
+  trails.sampleCount = 0;
+}
+
+/**
+ * Collapse one particle's whole history onto a single point, so a particle that
+ * teleports (respawn, manifold spawn) does not draw a streak across the frame.
+ */
+export function collapseTrailTo(index, x, y, z) {
+  if (index >= TRAIL_PARTICLE_CAP) return;
+  const base = index * TRAIL_MAX_LENGTH * 3;
+  for (let slot = 0; slot < TRAIL_MAX_LENGTH; slot += 1) {
+    const offset = base + slot * 3;
+    trails.history[offset] = x;
+    trails.history[offset + 1] = y;
+    trails.history[offset + 2] = z;
+  }
+}
+
+/** Append one position sample per tracked particle. One call per sub-step. */
+export function sampleTrails(activeCount) {
+  const tracked = Math.min(activeCount, TRAIL_PARTICLE_CAP);
+  const slot = trails.writeIndex;
+  for (let index = 0; index < tracked; index += 1) {
+    const particle = particles[index];
+    const offset = (index * TRAIL_MAX_LENGTH + slot) * 3;
+    trails.history[offset] = particle.positionX;
+    trails.history[offset + 1] = particle.positionY;
+    trails.history[offset + 2] = particle.positionZ;
+  }
+  trails.writeIndex = (slot + 1) % TRAIL_MAX_LENGTH;
+  trails.sampleCount = Math.min(trails.sampleCount + 1, TRAIL_MAX_LENGTH);
+}
+
+/**
+ * Seed points in normalized state-space coordinates, chosen to sit inside each
+ * attractor's basin so the pre-warm converges instead of diverging.
+ */
+const ATTRACTOR_SEED_POINTS = Object.freeze({
+  lorenz: [0.05, 0.05, 0.08],
+  rossler: [0.18, 0.02, -0.90],
+  halvorsen: [-0.10, 0.05, 0.02],
+  aizawa: [0.08, 0.02, -0.60],
+  thomas: [0.20, 0.14, -0.05],
+  dadras: [0.10, 0.06, -0.70]
+});
+
+/**
+ * Collapse the whole pool onto one point inside the attractor's basin. This is
+ * only the starting condition for the leader walk in render.js — a blob left to
+ * spread on its own works for Lorenz and Halvorsen but not for Rossler, Aizawa
+ * or Thomas, whose leading Lyapunov exponents are an order of magnitude
+ * smaller. Those would sit as a bright dot for the better part of a minute.
+ */
+export function seedAttractorPoint(sphereBoundary, type) {
+  const seed = ATTRACTOR_SEED_POINTS[type] || [0.06, 0.04, 0.02];
+  const jitter = sphereBoundary * 0.004;
+  for (let index = 0; index < PARTICLE_POOL; index += 1) {
+    const particle = particles[index];
+    particle.positionX =
+      seed[0] * sphereBoundary + (hash01(index * 3 + 1) - 0.5) * jitter;
+    particle.positionY =
+      seed[1] * sphereBoundary + (hash01(index * 3 + 2) - 0.5) * jitter;
+    particle.positionZ =
+      seed[2] * sphereBoundary + (hash01(index * 3 + 3) - 0.5) * jitter;
+    particle.velocityX = 0;
+    particle.velocityY = 0;
+    particle.velocityZ = 0;
+  }
+  resetTrails();
+}
+
+/**
+ * Copy a source particle's state onto another with a small deterministic
+ * transverse offset, so the manifold reads as a filament with thickness rather
+ * than a perfect one-dimensional wire.
+ */
+export function copyParticleWithJitter(targetIndex, source, jitterScale) {
+  if (targetIndex >= PARTICLE_POOL) return;
+  const particle = particles[targetIndex];
+  particle.positionX =
+    source.positionX + (hash01(targetIndex * 13 + 1) - 0.5) * jitterScale;
+  particle.positionY =
+    source.positionY + (hash01(targetIndex * 13 + 2) - 0.5) * jitterScale;
+  particle.positionZ =
+    source.positionZ + (hash01(targetIndex * 13 + 3) - 0.5) * jitterScale;
+  particle.velocityX = source.velocityX;
+  particle.velocityY = source.velocityY;
+  particle.velocityZ = source.velocityZ;
+}
+
+/**
+ * Re-seed a newly activated particle from one already on the manifold. Without
+ * this, a rising particle count pops stale off-manifold positions into view.
+ */
+export function spawnFromManifold(targetIndex, sourceCount, sphereBoundary) {
+  if (sourceCount <= 0 || targetIndex >= PARTICLE_POOL) return;
+  const particle = particles[targetIndex];
+  const sourceIndex = (Math.imul(targetIndex, 2654435761) >>> 0) % sourceCount;
+  const source = particles[sourceIndex];
+  if (source === particle) return;
+
+  const jitter = sphereBoundary * 0.012;
+  particle.positionX =
+    source.positionX + (hash01(targetIndex * 7 + 1) - 0.5) * jitter;
+  particle.positionY =
+    source.positionY + (hash01(targetIndex * 7 + 2) - 0.5) * jitter;
+  particle.positionZ =
+    source.positionZ + (hash01(targetIndex * 7 + 3) - 0.5) * jitter;
+  particle.velocityX = source.velocityX;
+  particle.velocityY = source.velocityY;
+  particle.velocityZ = source.velocityZ;
+  collapseTrailTo(
+    targetIndex,
+    particle.positionX,
+    particle.positionY,
+    particle.positionZ
+  );
+}
+
+/**
+ * Return an escaped particle to the manifold instead of bouncing it off the
+ * bounding box. A state space has no walls, and the old elastic bounce piled
+ * escapees into flat planes that read as straight lines belonging to no
+ * equation — most obvious on Rössler and Dadras.
+ */
+function respawnOnManifold(particle, index, pool, activeCount, limit, jitterScale) {
+  let source = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (activeCount <= 0) break;
+    const candidateIndex =
+      (Math.imul(index + attempt * 7919, 2654435761) >>> 0) % activeCount;
+    const candidate = pool[candidateIndex];
+    if (
+      candidate !== particle &&
+      Math.abs(candidate.positionX) <= limit &&
+      Math.abs(candidate.positionY) <= limit &&
+      Math.abs(candidate.positionZ) <= limit
+    ) {
+      source = candidate;
+      break;
+    }
+  }
+
+  if (source) {
+    const jitter = jitterScale * 0.012;
+    particle.positionX =
+      source.positionX + (hash01(index * 11 + 1) - 0.5) * jitter;
+    particle.positionY =
+      source.positionY + (hash01(index * 11 + 2) - 0.5) * jitter;
+    particle.positionZ =
+      source.positionZ + (hash01(index * 11 + 3) - 0.5) * jitter;
+    particle.velocityX = source.velocityX;
+    particle.velocityY = source.velocityY;
+    particle.velocityZ = source.velocityZ;
+  } else {
+    // Nothing healthy to copy yet (first steps after a seed). Fall back to
+    // pulling the particle back toward the origin with most of its energy gone.
+    particle.positionX *= 0.25;
+    particle.positionY *= 0.25;
+    particle.positionZ *= 0.25;
+    particle.velocityX *= 0.1;
+    particle.velocityY *= 0.1;
+    particle.velocityZ *= 0.1;
+  }
+
+  collapseTrailTo(
+    index,
+    particle.positionX,
+    particle.positionY,
+    particle.positionZ
+  );
+}
 
 
 function writeLiquidAcceleration(
@@ -183,10 +389,21 @@ function writeLiquidAcceleration(
     noiseZ * horizontalTurbulence;
 }
 
-function clampVectorMagnitude(x, y, z, maximum) {
+/**
+ * Soft knee limiter. Below `knee` the vector passes through untouched; above it
+ * the magnitude compresses smoothly toward `ceiling`. Derivative is 1 at the
+ * knee, so there is no visible kink.
+ *
+ * The previous hard clamp truncated the fastest sections of every field, which
+ * is exactly the speed contrast that makes a lobe transition legible — and that
+ * contrast now drives particle colour.
+ */
+function softLimitVector(x, y, z, knee, ceiling) {
   const length = Math.sqrt(x * x + y * y + z * z);
-  if (length <= maximum || length <= 1e-9) return [x, y, z];
-  const scale = maximum / length;
+  if (length <= knee || length <= 1e-9) return [x, y, z];
+  const range = Math.max(ceiling - knee, 1e-6);
+  const compressed = knee + range * (1 - Math.exp(-(length - knee) / range));
+  const scale = compressed / length;
   return [x * scale, y * scale, z * scale];
 }
 
@@ -284,7 +501,7 @@ function writeAttractorAcceleration(
     dz = (d * X * Y - e * Z) / 7;
   }
 
-  [dx, dy, dz] = clampVectorMagnitude(dx, dy, dz, 4.25);
+  [dx, dy, dz] = softLimitVector(dx, dy, dz, 2.6, 6.8);
 
   // Treat the mathematical vector field as a desired first-order velocity.
   // Steering toward that velocity preserves each attractor's characteristic
@@ -945,28 +1162,18 @@ export class Particle {
     if (usesAttractorBounds) {
       // Chaotic attractors are defined in Cartesian state spaces. A spherical
       // projection clips their lobes and rings, so keep them inside the same
-      // nominal size with per-axis bounds instead.
+      // nominal size with per-axis bounds instead. Anything that escapes is
+      // re-seeded onto the manifold rather than bounced off the box.
       const limit = sphereBoundary * 1.35;
-      if (this.positionX > limit) {
-        this.positionX = limit;
-        if (this.velocityX > 0) this.velocityX *= -0.28;
-      } else if (this.positionX < -limit) {
-        this.positionX = -limit;
-        if (this.velocityX < 0) this.velocityX *= -0.28;
-      }
-      if (this.positionY > limit) {
-        this.positionY = limit;
-        if (this.velocityY > 0) this.velocityY *= -0.28;
-      } else if (this.positionY < -limit) {
-        this.positionY = -limit;
-        if (this.velocityY < 0) this.velocityY *= -0.28;
-      }
-      if (this.positionZ > limit) {
-        this.positionZ = limit;
-        if (this.velocityZ > 0) this.velocityZ *= -0.28;
-      } else if (this.positionZ < -limit) {
-        this.positionZ = -limit;
-        if (this.velocityZ < 0) this.velocityZ *= -0.28;
+      if (
+        this.positionX > limit ||
+        this.positionX < -limit ||
+        this.positionY > limit ||
+        this.positionY < -limit ||
+        this.positionZ > limit ||
+        this.positionZ < -limit
+      ) {
+        respawnOnManifold(this, index, pool, activeCount, limit, sphereBoundary);
       }
     } else {
       // Boid simulations retain the original spherical confinement model.

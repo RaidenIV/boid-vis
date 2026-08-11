@@ -47,6 +47,7 @@ export function resetSimulation() {
   state.beatHistoryIndex = 0;
   state.beatCooldown = 0;
   state.flashAlpha = 0;
+  state.cameraFollowAzimuth = 0;
 }
 
 function triggerBeatFlash() {
@@ -209,7 +210,7 @@ function stepSimulation(stepTime, context) {
  * previous fixed camera exactly; movement presets are deterministic so preview
  * and export use the same camera path.
  */
-function updateCamera() {
+function updateCamera(deltaTime, playing) {
   const distance = state.cameraDistance;
   const amount = state.cameraAmount / 100;
   const speed = state.cameraSpeed;
@@ -242,6 +243,21 @@ function updateCamera() {
       x = Math.sin(time * 0.42) * radius;
       y = Math.sin(time * 0.31 + 1.35) * radius * 0.6;
       z = Math.max(5, distance + Math.sin(time * 0.23 + 2.1) * radius * 0.45);
+      break;
+    }
+    case "spectralCentroid": {
+      const energy = clamp(state.spectralEnergy || 0, 0, 1);
+      const centroidOffset = energy > 0.02
+        ? (clamp(state.spectralCentroid || 0.5, 0, 1) - 0.5) * 100 * amount
+        : 0;
+      const response = playing
+        ? 1 - Math.exp(-Math.max(0.001, deltaTime) * (1.5 + speed * 2.5))
+        : 0;
+      state.cameraFollowAzimuth += (centroidOffset - state.cameraFollowAzimuth) * response;
+      const angle = state.cameraFollowAzimuth * Math.PI / 180;
+      x = Math.sin(angle) * distance;
+      z = Math.cos(angle) * distance;
+      y = (energy - 0.5) * distance * 0.08 * amount;
       break;
     }
     case "static":
@@ -326,6 +342,6 @@ export function renderFrame(deltaTime, playing) {
   bloomPass.threshold = state.bloomThreshold;
 
   updateParticleGeometry();
-  updateCamera();
+  updateCamera(deltaTime, playing);
   renderScene();
 }

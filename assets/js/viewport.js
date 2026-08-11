@@ -43,7 +43,7 @@ export function fitViewport() {
 
   state.cssWidth = width;
   state.cssHeight = height;
-  state.pixelRatio = Math.min(window.devicePixelRatio, 2);
+  state.pixelRatio = Math.min(window.devicePixelRatio, state.renderPixelRatioLimit || 2);
 
   elements.canvas.style.width = `${width}px`;
   elements.canvas.style.height = `${height}px`;

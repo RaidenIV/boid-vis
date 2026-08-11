@@ -13,11 +13,15 @@ import { applyVolume, updateLoopButtonState } from "./playback.js";
 import { reseedParticles } from "./particles.js";
 import { resetSimulation } from "./render.js";
 import { updateVideoExportFormatUi } from "./export.js";
+import { fitViewport } from "./viewport.js";
+import { beginHistory, commitHistory } from "./history.js";
 
 const sectionKeys = {
   playback: ["volume", "muted", "audioLoop"],
-  audio: ["fftSize", "smoothing"],
+  audio: ["fftSize", "smoothing", "amplitudeMode", "inputGain", "noiseFloor", "dynamicRange"],
   viewport: ["viewportPreset"],
+  hud: ["hudEnabled", "hudOpacity", "hudScale"],
+  performance: ["qualityPreset", "renderPixelRatioLimit", "minParticles", "maxParticles"],
   camera: [
     "cameraPreset",
     "cameraSpeed",
@@ -100,46 +104,60 @@ function resetLoopSection() {
   setLoopStatus("Loop reset to the complete track.", "idle");
 }
 
-export function resetSection(section) {
-  if (section === "loop") {
-    resetLoopSection();
-    return;
-  }
-  if (section === "export-format") {
-    resetExportFormat();
-    return;
-  }
-  if (section === "export") {
-    elements.exportFileName.value = "";
-    resetExportFormat();
-    return;
-  }
+export function resetSection(section, { record = true } = {}) {
+  if (record) beginHistory(`Reset ${section}`);
+  try {
+    if (section === "loop") {
+      resetLoopSection();
+      return;
+    }
+    if (section === "export-format") {
+      resetExportFormat();
+      return;
+    }
+    if (section === "export") {
+      elements.exportFileName.value = "";
+      resetExportFormat();
+      return;
+    }
 
-  const keys = sectionKeys[section];
-  if (!keys) return;
-  resetKeys(keys);
+    const keys = sectionKeys[section];
+    if (!keys) return;
+    resetKeys(keys);
 
-  if (section === "playback") {
-    applyVolume();
-    updateLoopButtonState();
-  }
-  if (section === "particles") {
-    reseedParticles(state.sphereBoundary);
+    if (section === "playback") {
+      applyVolume();
+      updateLoopButtonState();
+    }
+    if (section === "particles") {
+      reseedParticles(state.sphereBoundary);
+    }
+    if (section === "performance") {
+      state.renderPixelRatioLimit = defaults.renderPixelRatioLimit;
+      fitViewport();
+    }
+  } finally {
+    if (record) commitHistory(`Reset ${section}`);
   }
 }
 
 /** The original "Reset to Defaults" button — now covers every section. */
 export function resetAll() {
-  Object.keys(sectionKeys).forEach((section) => resetSection(section));
-  setControlValue("lockedCmapIndex", defaults.lockedCmapIndex);
-  state.lockedCmapIndex = defaults.lockedCmapIndex;
-  syncColormapButtons();
-  resetLoopSection();
-  elements.exportFileName.value = "";
-  applyVolume();
-  updateLoopButtonState();
-  reseedParticles(state.sphereBoundary);
-  resetSimulation();
+  beginHistory("Reset all");
+  try {
+    Object.keys(sectionKeys).forEach((section) => resetSection(section, { record: false }));
+    setControlValue("lockedCmapIndex", defaults.lockedCmapIndex);
+    state.lockedCmapIndex = defaults.lockedCmapIndex;
+    syncColormapButtons();
+    resetLoopSection();
+    elements.exportFileName.value = "";
+    applyVolume();
+    updateLoopButtonState();
+    reseedParticles(state.sphereBoundary);
+    resetSimulation();
+  } finally {
+    commitHistory("Reset all");
+  }
 }
 
 export function initializeSectionResets() {

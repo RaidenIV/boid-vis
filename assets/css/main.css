@@ -1079,3 +1079,90 @@ progress::-moz-progress-bar {
     height: auto;
     box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
 }
+
+/* =============================================================================
+   MD GUIDE FEATURES — HUD, file metadata, quality and export diagnostics
+   ========================================================================== */
+
+#hud-canvas {
+    position: fixed;
+    z-index: 600;
+    pointer-events: none;
+    display: block;
+}
+#hud-canvas[hidden] { display: none; }
+
+.hud-toggle-control > label:first-child {
+    grid-area: label;
+}
+.hud-toggle-control > .switch {
+    grid-area: value;
+    justify-self: end;
+}
+
+.file-info-grid {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+    gap: 4px 10px;
+    margin: 10px 0 4px;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.025);
+    font-size: 11px;
+}
+.file-info-grid span { color: #777; }
+.file-info-grid strong {
+    color: #c8c8c8;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.export-estimate,
+.export-progress-details,
+.export-overlay-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+.export-estimate > div,
+.export-progress-details > div,
+.export-overlay-stats > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 9px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 6px;
+    min-width: 0;
+}
+.export-estimate span,
+.export-progress-details span,
+.export-overlay-stats span {
+    color: #777;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+.export-estimate strong,
+.export-progress-details strong,
+.export-overlay-stats strong {
+    color: #d6d6d6;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.export-overlay-stats { text-align: left; }
+
+.history-buttons { margin-top: 18px; }
+
+#drag-overlay.is-invalid {
+    background: rgba(248,113,113,0.10);
+    border-color: rgba(248,113,113,0.70);
+}

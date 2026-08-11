@@ -5,6 +5,7 @@
  */
 import { COLORMAPS } from "./config.js";
 import { elements, state } from "./core.js";
+import { beginHistory, commitHistory } from "./history.js";
 
 /* ---------------------------------------------------------------------------
    Collapsible sections and clusters
@@ -149,13 +150,26 @@ export function bindRange(rangeInput, valueInput, key, onChange = () => {}) {
     if (!silent) onChange(value);
   };
 
-  rangeInput.addEventListener("input", (event) => apply(event.target.value));
+  const label = `Change ${key}`;
+  rangeInput.addEventListener("pointerdown", () => beginHistory(label));
+  rangeInput.addEventListener("input", (event) => {
+    beginHistory(label);
+    apply(event.target.value);
+  });
+  rangeInput.addEventListener("change", () => commitHistory(label));
+  rangeInput.addEventListener("blur", () => commitHistory(label));
   if (valueInput) {
-    valueInput.addEventListener("change", (event) => apply(event.target.value));
+    valueInput.addEventListener("focus", () => beginHistory(label));
+    valueInput.addEventListener("change", (event) => {
+      apply(event.target.value);
+      commitHistory(label);
+    });
     valueInput.addEventListener("input", (event) => {
       if (event.target.value === "" || event.target.value === "-") return;
+      beginHistory(label);
       apply(event.target.value);
     });
+    valueInput.addEventListener("blur", () => commitHistory(label));
   }
 
   registry.set(key, (value) => apply(value, { silent: false }));
@@ -171,7 +185,12 @@ export function bindSelect(selectElement, key, onChange = () => {}, cast = Strin
     if (!silent) onChange(value);
   };
 
-  selectElement.addEventListener("change", (event) => apply(event.target.value));
+  selectElement.addEventListener("change", (event) => {
+    const label = `Change ${key}`;
+    beginHistory(label);
+    apply(event.target.value);
+    commitHistory(label);
+  });
   registry.set(key, (value) => apply(value));
   apply(state[key], { silent: true });
 }
@@ -185,7 +204,12 @@ export function bindToggle(checkbox, key, onChange = () => {}) {
     if (!silent) onChange(value);
   };
 
-  checkbox.addEventListener("change", (event) => apply(event.target.checked));
+  checkbox.addEventListener("change", (event) => {
+    const label = `Change ${key}`;
+    beginHistory(label);
+    apply(event.target.checked);
+    commitHistory(label);
+  });
   registry.set(key, (value) => apply(value));
   apply(state[key], { silent: true });
 }
@@ -223,8 +247,10 @@ export function buildColormapGrid() {
 }
 
 export function selectColormap(index) {
+  beginHistory("Change colormap");
   state.lockedCmapIndex = index;
   syncColormapButtons();
+  commitHistory("Change colormap");
 }
 
 export function syncColormapButtons() {

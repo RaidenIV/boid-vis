@@ -12,6 +12,7 @@ export const state = {
   analysisReady: false,
   isAnalyzing: false,
   decodedAudioBuffer: null,
+  fileInfo: null,
 
   // Precomputed analysis timeline
   analysis: null,          // { fps, frameCount, bands: Float32Array[7], low: Float32Array }
@@ -20,6 +21,9 @@ export const state = {
   // Live magnitudes handed to the render step
   magnitudes: new Float32Array(7),
   lowFreqMagnitude: 0,
+  spectralCentroid: 0.5,
+  spectralEnergy: 0,
+  adaptiveReference: 0,
 
   // Simulation clock
   time: 0,
@@ -28,6 +32,8 @@ export const state = {
   cmapA: 0,
   cmapB: 1,
   cmapMix: 0,
+  cameraFollowAzimuth: 0,
+  previewFps: 60,
 
   // Beat detection
   beatHistory: null,
@@ -60,6 +66,9 @@ export const state = {
   isExportingVideo: false,
   videoExportCancelled: false,
   videoExportCancelHandlers: new Set(),
+  lastExportSecondsPerFrame: 0,
+  renderTimeOverride: null,
+  qualityPresetApplying: false,
 
   // UI
   panelCollapsed: false,
@@ -75,6 +84,8 @@ export const elements = {
   minimize: byId("minimize-btn"),
   beatFlash: byId("beat-flash"),
   dragOverlay: byId("drag-overlay"),
+  dragFileName: byId("drag-file-name"),
+  hudCanvas: byId("hud-canvas"),
 
   // File and playback
   loadButton: byId("load-btn"),
@@ -85,6 +96,14 @@ export const elements = {
   audioLoadPercent: byId("audio-load-percent"),
   audioLoadStage: byId("audio-load-stage"),
   audioName: byId("audio-name"),
+  audioFileStatus: byId("audio-file-status"),
+  fileInfoName: byId("file-info-name"),
+  fileInfoType: byId("file-info-type"),
+  fileInfoSize: byId("file-info-size"),
+  fileInfoDuration: byId("file-info-duration"),
+  fileInfoSampleRate: byId("file-info-sample-rate"),
+  fileInfoChannels: byId("file-info-channels"),
+  fileInfoDecodeStatus: byId("file-info-decode-status"),
   playButton: byId("play-btn"),
   loopButton: byId("loop-btn"),
   progressContainer: byId("progress-container"),
@@ -130,6 +149,17 @@ export const elements = {
   cameraAzimuth: byId("camera-azimuth"),
   cameraAzimuthValue: byId("camera-azimuth-value"),
 
+  // HUD
+  hudEnabled: byId("hud-enabled"),
+  hudOpacity: byId("hud-opacity"),
+  hudOpacityValue: byId("hud-opacity-value"),
+  hudScale: byId("hud-scale"),
+  hudScaleValue: byId("hud-scale-value"),
+
+  // Performance
+  qualityPreset: byId("quality-preset"),
+  qualityStatus: byId("quality-status"),
+
   // Audio resolution
   fftSize: byId("fft-size"),
   fftLoadWrap: byId("fft-load-wrap"),
@@ -137,6 +167,13 @@ export const elements = {
   fftLoadPercent: byId("fft-load-percent"),
   smoothing: byId("smoothing"),
   smoothingValue: byId("smoothing-value"),
+  amplitudeMode: byId("amplitude-mode"),
+  inputGain: byId("input-gain"),
+  inputGainValue: byId("input-gain-value"),
+  noiseFloor: byId("noise-floor"),
+  noiseFloorValue: byId("noise-floor-value"),
+  dynamicRange: byId("dynamic-range"),
+  dynamicRangeValue: byId("dynamic-range-value"),
 
   // Particles
   reactivity: byId("reactivity-slider"),
@@ -208,6 +245,12 @@ export const elements = {
   exportVideo: byId("export-video"),
   exportPng: byId("export-png"),
   exportJson: byId("export-json"),
+  importJson: byId("import-json"),
+  importJsonFile: byId("import-json-file"),
+  settingsStatus: byId("settings-status"),
+  exportEstimateDuration: byId("export-estimate-duration"),
+  exportEstimateSize: byId("export-estimate-size"),
+  exportEstimateTime: byId("export-estimate-time"),
   exportStatus: byId("export-status"),
   exportProgressWrap: byId("export-progress-wrap"),
   exportProgress: byId("export-progress"),
@@ -216,8 +259,18 @@ export const elements = {
   exportOverlayProgress: byId("export-overlay-progress"),
   exportOverlayProgressText: byId("export-overlay-progress-text"),
   exportOverlayDetail: byId("export-overlay-detail"),
+  exportProgressStage: byId("export-progress-stage"),
+  exportProgressTime: byId("export-progress-time"),
+  exportProgressFrames: byId("export-progress-frames"),
+  exportProgressEta: byId("export-progress-eta"),
+  exportOverlayStage: byId("export-overlay-stage"),
+  exportOverlayTime: byId("export-overlay-time"),
+  exportOverlayFrames: byId("export-overlay-frames"),
+  exportOverlayEta: byId("export-overlay-eta"),
   exportCancel: byId("export-cancel"),
 
+  undoButton: byId("undo-btn"),
+  redoButton: byId("redo-btn"),
   resetButton: byId("reset-btn")
 };
 

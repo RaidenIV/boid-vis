@@ -12,6 +12,8 @@ import { audio, elements, state } from "./core.js";
 import { getSelectedLoopRange, hasPartialLoopSelection } from "./loop.js";
 import { pausePlayback } from "./playback.js";
 import { renderFrame, resetSimulation } from "./render.js";
+import { drawHud } from "./hud.js";
+import { buildSettingsPayload, getSerializableSettings } from "./settings.js";
 import { canvas, resizeRenderer } from "./scene.js";
 import { fitViewport, getExportDimensions } from "./viewport.js";
 import {
@@ -26,6 +28,7 @@ let MediabunnyModule = null;
 
 let compositeCanvas = null;
 let compositeContext = null;
+let exportProgressTracker = null;
 
 /* ---------------------------------------------------------------------------
    Status and progress
@@ -35,7 +38,31 @@ export function setExportStatus(message, status = "idle") {
   elements.exportStatus.dataset.state = status;
 }
 
-export function setExportProgress(percent, detail = "Encoding") {
+function formatDurationLabel(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+  return `${minutes}m ${String(remaining).padStart(2, "0")}s`;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function initializeProgressTracker(totalFrames, duration) {
+  exportProgressTracker = {
+    startedAt: performance.now(),
+    totalFrames,
+    duration,
+    completedFrames: 0
+  };
+}
+
+export function setExportProgress(percent, detail = "Encoding", meta = {}) {
   const normalized = clamp(Number(percent) || 0, 0, 100);
   const rounded = Math.round(normalized);
   elements.exportProgressWrap.hidden = false;
@@ -44,6 +71,47 @@ export function setExportProgress(percent, detail = "Encoding") {
   elements.exportOverlayProgress.value = normalized;
   elements.exportOverlayProgressText.textContent = `${rounded}%`;
   elements.exportOverlayDetail.textContent = `${detail} · ${rounded}%`;
+
+  const stage = meta.stage || detail || "Working";
+  const completedFrames = Number.isFinite(meta.completedFrames)
+    ? meta.completedFrames
+    : exportProgressTracker?.completedFrames || 0;
+  const totalFrames = Number.isFinite(meta.totalFrames)
+    ? meta.totalFrames
+    : exportProgressTracker?.totalFrames || 0;
+  const duration = Number.isFinite(meta.duration)
+    ? meta.duration
+    : exportProgressTracker?.duration || 0;
+  const currentTime = Number.isFinite(meta.currentTime)
+    ? meta.currentTime
+    : totalFrames > 0 ? duration * (completedFrames / totalFrames) : 0;
+
+  if (exportProgressTracker && Number.isFinite(meta.completedFrames)) {
+    exportProgressTracker.completedFrames = meta.completedFrames;
+  }
+
+  let etaLabel = "—";
+  if (exportProgressTracker && completedFrames >= 5 && totalFrames > completedFrames) {
+    const elapsedWall = Math.max(0.001, (performance.now() - exportProgressTracker.startedAt) / 1000);
+    const secondsPerFrame = elapsedWall / completedFrames;
+    etaLabel = formatDurationLabel((totalFrames - completedFrames) * secondsPerFrame);
+  } else if (rounded >= 98) {
+    etaLabel = "< 1s";
+  }
+
+  const timeLabel = duration > 0
+    ? `${formatDurationLabel(currentTime)} / ${formatDurationLabel(duration)}`
+    : "—";
+  const frameLabel = totalFrames > 0 ? `${Math.min(completedFrames, totalFrames)} / ${totalFrames}` : "—";
+
+  elements.exportProgressStage.textContent = stage;
+  elements.exportProgressTime.textContent = timeLabel;
+  elements.exportProgressFrames.textContent = frameLabel;
+  elements.exportProgressEta.textContent = etaLabel;
+  elements.exportOverlayStage.textContent = stage;
+  elements.exportOverlayTime.textContent = timeLabel;
+  elements.exportOverlayFrames.textContent = frameLabel;
+  elements.exportOverlayEta.textContent = etaLabel;
 }
 
 function getSelectedVideoFileType() {
@@ -147,6 +215,7 @@ function compositeFrame(width, height) {
     compositeContext.fillRect(0, 0, width, height);
   }
 
+  drawHud(compositeContext, width, height);
   return compositeCanvas;
 }
 
@@ -205,65 +274,16 @@ export async function exportPng() {
    JSON export
 --------------------------------------------------------------------------- */
 export function collectExportedControlValues() {
-  return {
-    fileName: state.fileName,
-    fftSize: state.fftSize,
-    smoothing: state.smoothing,
-    viewportPreset: state.viewportPreset,
-    cameraPreset: state.cameraPreset,
-    cameraSpeed: state.cameraSpeed,
-    cameraAmount: state.cameraAmount,
-    cameraDistance: state.cameraDistance,
-    cameraElevation: state.cameraElevation,
-    cameraAzimuth: state.cameraAzimuth,
-    volume: state.volume,
-    muted: state.muted,
-    audioLoop: state.audioLoop,
-    loopBpm: state.loopBpm,
-    loopBars: state.loopBars,
-    loopSnap: state.loopSnap,
-    loopStart: state.loopStart,
-    loopEnd: state.loopEnd,
-    reactivity: state.reactivity,
-    boidType: state.boidType,
-    morphSpeed: state.morphSpeed,
-    movementSpeed: state.movementSpeed,
-    movementAmount: state.movementAmount,
-    boidAlignment: state.boidAlignment,
-    boidCohesion: state.boidCohesion,
-    boidSeparation: state.boidSeparation,
-    visualizationSize: state.visualizationSize,
-    minParticles: state.minParticles,
-    maxParticles: state.maxParticles,
-    particleSize: state.particleSize,
-    particleOpacity: state.particleOpacity,
-    noiseScale: state.noiseScale,
-    damping: state.damping,
-    sphereBoundary: state.sphereBoundary,
-    bloomBase: state.bloomBase,
-    bloomGain: state.bloomGain,
-    bloomRadius: state.bloomRadius,
-    bloomThreshold: state.bloomThreshold,
-    lockedCmapIndex: state.lockedCmapIndex,
-    cycleSpeed: state.cycleSpeed,
-    brightness: state.brightness,
-    beatFlashEnabled: state.beatFlashEnabled,
-    beatFlashIntensity: state.beatFlashIntensity,
-    beatSensitivity: state.beatSensitivity,
-    videoResolution: state.videoResolution,
-    videoFileType: state.videoFileType,
-    videoFrameRate: state.videoFrameRate,
-    videoBitrateMbps: state.videoBitrateMbps
-  };
+  return getSerializableSettings();
 }
 
 export function exportJson() {
-  const payload = JSON.stringify(collectExportedControlValues(), null, 2);
+  const payload = JSON.stringify(buildSettingsPayload(), null, 2);
   downloadBlob(
     new Blob([payload], { type: "application/json" }),
     `${getExportFileBaseName()}.json`
   );
-  setExportStatus("Settings exported as JSON.", "done");
+  setExportStatus("Settings exported as versioned JSON.", "done");
 }
 
 /* ---------------------------------------------------------------------------
@@ -356,6 +376,37 @@ function getVideoExportRange() {
     return getSelectedLoopRange();
   }
   return { start: 0, end: fullDuration, duration: fullDuration };
+}
+
+export function updateExportEstimate() {
+  const range = getVideoExportRange();
+  if (!range.duration || !state.decodedAudioBuffer) {
+    elements.exportEstimateDuration.textContent = "—";
+    elements.exportEstimateSize.textContent = "—";
+    elements.exportEstimateTime.textContent = "—";
+    return;
+  }
+
+  const { width, height } = getExportDimensions();
+  const frameRate = Number(state.videoFrameRate) || videoExportDefaults.frameRate;
+  const baseBitrateMbps = Number(state.videoBitrateMbps) || videoExportDefaults.bitrateMbps;
+  const videoBitrate = getEffectiveVideoBitrate(baseBitrateMbps, width, height);
+  const audioBitrate = 192_000;
+  const estimatedBytes = range.duration * (videoBitrate + audioBitrate) / 8 * 1.03;
+  const totalFrames = Math.max(1, Math.ceil(range.duration * frameRate));
+
+  let estimatedSeconds;
+  if (state.lastExportSecondsPerFrame > 0) {
+    estimatedSeconds = totalFrames * state.lastExportSecondsPerFrame;
+  } else {
+    const pixelScale = (width * height) / (1920 * 1080);
+    const fpsScale = frameRate / 30;
+    estimatedSeconds = range.duration * clamp(0.28 * pixelScale * fpsScale, 0.25, 6);
+  }
+
+  elements.exportEstimateDuration.textContent = formatDurationLabel(range.duration);
+  elements.exportEstimateSize.textContent = `≈ ${formatBytes(estimatedBytes)}`;
+  elements.exportEstimateTime.textContent = `≈ ${formatDurationLabel(estimatedSeconds)}`;
 }
 
 async function encodeAudioIntoMuxer(muxer, audioBuffer, startSeconds, endSeconds) {
@@ -503,6 +554,7 @@ async function renderVideoExportFrames({
 
     const elapsed = Math.min(duration, frameIndex / frameRate);
     const exportTime = Math.min(exportEnd, exportStart + elapsed);
+    state.renderTimeOverride = exportTime;
 
     sampleAnalysisAtTime(exportTime);
     renderFrame(frameDelta, true);
@@ -525,7 +577,13 @@ async function renderVideoExportFrames({
         `Encoding ${formatLabel} video… ${percent}% · ${frameIndex + 1}/${totalFrames} frames`,
         "active"
       );
-      setExportProgress(percent, `Encoding frame ${frameIndex + 1} of ${totalFrames}`);
+      setExportProgress(percent, `Encoding frame ${frameIndex + 1} of ${totalFrames}`, {
+        stage: `Rendering ${formatLabel} video`,
+        completedFrames: frameIndex + 1,
+        totalFrames,
+        duration,
+        currentTime: Math.min(duration, (frameIndex + 1) / frameRate)
+      });
     }
   }
 }
@@ -578,6 +636,8 @@ export async function exportVideo() {
   const exportEnd = exportRange.end;
   const duration = Math.max(0.001, exportRange.duration);
   const totalFrames = Math.max(1, Math.ceil(duration * frameRate));
+  initializeProgressTracker(totalFrames, duration);
+  const exportWallStart = performance.now();
 
   const savedWidth = state.cssWidth;
   const savedHeight = state.cssHeight;
@@ -595,6 +655,7 @@ export async function exportVideo() {
   elements.exportVideo.classList.add("is-cancel");
   elements.exportPng.disabled = true;
   elements.exportJson.disabled = true;
+  elements.importJson.disabled = true;
   elements.videoFileType.disabled = true;
   elements.videoFrameRate.disabled = true;
   elements.videoBitrate.disabled = true;
@@ -604,10 +665,13 @@ export async function exportVideo() {
     `Preparing ${formatLabel} encoder · ${frameRate} FPS · ${effectiveBitrateMbps.toFixed(1)} Mbps quality mode…`,
     "active"
   );
-  setExportProgress(1, "Preparing encoder");
+  setExportProgress(1, "Preparing encoder", {
+    stage: "Preparing", completedFrames: 0, totalFrames, duration, currentTime: 0
+  });
 
   let videoEncoder = null;
   let mediabunnyOutput = null;
+  let exportCompleted = false;
 
   try {
     resizeRenderer(width, height, 1);
@@ -733,12 +797,16 @@ export async function exportVideo() {
       }
 
       setExportStatus("Encoding synchronized audio… 92%", "active");
-      setExportProgress(92, "Encoding audio");
+      setExportProgress(92, "Encoding audio", {
+        stage: "Encoding audio", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
       await audioEncodingPromise;
       if (audioEncodingError) throw audioEncodingError;
 
       setExportStatus("Finalizing MKV container… 98%", "active");
-      setExportProgress(98, "Finalizing MKV");
+      setExportProgress(98, "Finalizing MKV", {
+        stage: "Finalizing file", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
       await mediabunnyOutput.finalize();
 
       const blob = new Blob([target.buffer], { type: "video/x-matroska" });
@@ -747,7 +815,10 @@ export async function exportVideo() {
         `MKV exported with ${selectedVideoCodec.toUpperCase()} video and ${selectedAudioCodec.toUpperCase()} audio · ${(blob.size / 1048576).toFixed(1)} MB`,
         "done"
       );
-      setExportProgress(100, "Export complete");
+      setExportProgress(100, "Export complete", {
+        stage: "Complete", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
+      exportCompleted = true;
     } else {
       const { Muxer, ArrayBufferTarget } = await loadMp4MuxerModule();
       throwIfCancelled();
@@ -860,7 +931,9 @@ export async function exportVideo() {
       let audioResult = { encoded: false, reason: "AAC unavailable." };
       if (audioSupported) {
         setExportStatus("Encoding synchronized audio… 92%", "active");
-        setExportProgress(92, "Encoding audio");
+        setExportProgress(92, "Encoding audio", {
+        stage: "Encoding audio", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
         audioResult = await encodeAudioIntoMuxer(
           muxer,
           state.decodedAudioBuffer,
@@ -875,7 +948,9 @@ export async function exportVideo() {
       }
 
       setExportStatus("Finalizing MP4 container… 98%", "active");
-      setExportProgress(98, "Finalizing MP4");
+      setExportProgress(98, "Finalizing MP4", {
+        stage: "Finalizing file", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
       muxer.finalize();
 
       const blob = new Blob([target.buffer], { type: "video/mp4" });
@@ -886,7 +961,10 @@ export async function exportVideo() {
           : `MP4 exported without audio (${audioResult.reason}) · ${(blob.size / 1048576).toFixed(1)} MB`,
         "done"
       );
-      setExportProgress(100, "Export complete");
+      setExportProgress(100, "Export complete", {
+        stage: "Complete", completedFrames: totalFrames, totalFrames, duration, currentTime: duration
+      });
+      exportCompleted = true;
     }
   } catch (error) {
     if (state.videoExportCancelled) {
@@ -919,6 +997,12 @@ export async function exportVideo() {
       console.warn("MKV output cleanup failed", error);
     }
 
+    if (exportCompleted && exportProgressTracker?.totalFrames) {
+      const elapsedWallSeconds = Math.max(0.001, (performance.now() - exportWallStart) / 1000);
+      state.lastExportSecondsPerFrame = elapsedWallSeconds / exportProgressTracker.totalFrames;
+    }
+    exportProgressTracker = null;
+    state.renderTimeOverride = null;
     state.isExportingVideo = false;
     state.videoExportCancelled = false;
     state.videoExportCancelHandlers.clear();
@@ -926,6 +1010,7 @@ export async function exportVideo() {
     elements.exportVideo.disabled = false;
     elements.exportPng.disabled = false;
     elements.exportJson.disabled = false;
+    elements.importJson.disabled = false;
     elements.videoFileType.disabled = false;
     elements.videoFrameRate.disabled = false;
     elements.videoBitrate.disabled = false;
@@ -943,6 +1028,7 @@ export async function exportVideo() {
     sampleAnalysisAtTime(audio.currentTime);
     renderFrame(0, false);
     endExportOverlay();
+    updateExportEstimate();
 
     if (savedWasPlaying) {
       try {

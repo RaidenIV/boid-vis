@@ -13,6 +13,10 @@ export const defaults = Object.freeze({
   // Analysis
   fftSize: 4096,
   smoothing: 0.8,
+  amplitudeMode: "adaptive",
+  inputGain: 1.0,
+  noiseFloor: 2.5,
+  dynamicRange: 60,
 
   // Viewport
   viewportPreset: "fill",
@@ -24,6 +28,15 @@ export const defaults = Object.freeze({
   cameraDistance: 50,
   cameraElevation: 0,
   cameraAzimuth: 0,
+
+  // HUD
+  hudEnabled: true,
+  hudOpacity: 0.9,
+  hudScale: 1.0,
+
+  // Performance
+  qualityPreset: "custom",
+  renderPixelRatioLimit: 2,
 
   // Particles
   reactivity: 100,
@@ -59,6 +72,34 @@ export const defaults = Object.freeze({
   beatFlashIntensity: 100,
   beatSensitivity: 1.55
 });
+
+
+export const SETTINGS_APP = "Particle Visualizer";
+export const SETTINGS_VERSION = 1;
+
+export const QUALITY_PRESETS = Object.freeze({
+  performance: { minParticles: 400, maxParticles: 8000, renderPixelRatioLimit: 1 },
+  balanced: { minParticles: 800, maxParticles: 16000, renderPixelRatioLimit: 1.5 },
+  high: { minParticles: 800, maxParticles: 24000, renderPixelRatioLimit: 2 },
+  maximum: { minParticles: 1200, maxParticles: 40000, renderPixelRatioLimit: 2.5 }
+});
+
+export const PERSISTED_SETTING_KEYS = Object.freeze([
+  "volume", "muted", "audioLoop",
+  "fftSize", "smoothing", "amplitudeMode", "inputGain", "noiseFloor", "dynamicRange",
+  "viewportPreset",
+  "cameraPreset", "cameraSpeed", "cameraAmount", "cameraDistance", "cameraElevation", "cameraAzimuth",
+  "hudEnabled", "hudOpacity", "hudScale",
+  "qualityPreset", "renderPixelRatioLimit",
+  "reactivity", "boidType", "morphSpeed", "movementSpeed", "movementAmount",
+  "boidAlignment", "boidCohesion", "boidSeparation", "visualizationSize",
+  "minParticles", "maxParticles", "particleSize", "particleOpacity", "noiseScale", "damping", "sphereBoundary",
+  "bloomBase", "bloomGain", "bloomRadius", "bloomThreshold",
+  "lockedCmapIndex", "cycleSpeed", "brightness",
+  "beatFlashEnabled", "beatFlashIntensity", "beatSensitivity",
+  "loopBpm", "loopBars", "loopSnap", "loopStart", "loopEnd",
+  "videoResolution", "videoFileType", "videoFrameRate", "videoBitrateMbps"
+]);
 
 export const loopDefaults = Object.freeze({
   bpm: 120,

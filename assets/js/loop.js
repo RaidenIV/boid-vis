@@ -4,6 +4,7 @@
  */
 import { detectTempo } from "./analysis.js";
 import { audio, elements, state } from "./core.js";
+import { beginHistory, commitHistory } from "./history.js";
 import { clamp, formatPreciseTime } from "./utils.js";
 
 function getDuration() {
@@ -1273,6 +1274,7 @@ export const galaxyLoopController = (() => {
   function applyAudioLoop(start, end) {
       const duration = state.decodedAudioBuffer?.duration || audio.duration || 0;
       if (!(duration > 0)) return;
+      beginHistory('Apply loop');
       state.loopStart = clamp(Number(start) || 0, 0, duration);
       state.loopEnd = clamp(Number(end) || duration, state.loopStart, duration);
       state.loopBpm = clamp(Number(popupBpm) || state.loopBpm || 120, 40, 300);
@@ -1289,10 +1291,13 @@ export const galaxyLoopController = (() => {
           audio.currentTime = state.loopStart;
       }
       updateMainLoopButton();
+      commitHistory('Apply loop');
+      window.dispatchEvent(new CustomEvent('visualizer-loop-changed'));
   }
 
   function clearAudioLoop() {
       const duration = state.decodedAudioBuffer?.duration || audio.duration || 0;
+      beginHistory('Clear loop');
       state.audioLoop = false;
       state.loopStart = 0;
       state.loopEnd = duration;
@@ -1300,6 +1305,8 @@ export const galaxyLoopController = (() => {
       updateLoopSelectionUi();
       drawLoopWaveform();
       updateMainLoopButton();
+      commitHistory('Clear loop');
+      window.dispatchEvent(new CustomEvent('visualizer-loop-changed'));
   }
   return { open: openLoopPopup, close: closePopup, syncButton: updateMainLoopButton };
 })();

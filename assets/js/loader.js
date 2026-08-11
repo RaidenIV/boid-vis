@@ -9,6 +9,55 @@ import { clamp } from "./utils.js";
 
 let decodeContext = null;
 
+function formatFileSize(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "Unavailable";
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+  return `${minutes}:${String(remaining).padStart(2, "0")}`;
+}
+
+function getFileTypeLabel(file) {
+  if (file.type) return file.type;
+  const extension = file.name.includes(".") ? file.name.split(".").pop() : "";
+  return extension ? extension.toUpperCase() : "Unavailable";
+}
+
+function updateFileInformation(file, decoded = null, decodeStatus = "Reading") {
+  state.fileInfo = file ? {
+    name: file.name,
+    type: getFileTypeLabel(file),
+    size: file.size,
+    duration: decoded?.duration ?? null,
+    sampleRate: decoded?.sampleRate ?? null,
+    channels: decoded?.numberOfChannels ?? null,
+    decodeStatus
+  } : null;
+
+  elements.fileInfoName.textContent = file?.name || "No file loaded";
+  elements.fileInfoName.title = file?.name || "No file loaded";
+  elements.fileInfoType.textContent = file ? getFileTypeLabel(file) : "Unavailable";
+  elements.fileInfoSize.textContent = file ? formatFileSize(file.size) : "Unavailable";
+  elements.fileInfoDuration.textContent = decoded ? formatDuration(decoded.duration) : "Unavailable";
+  elements.fileInfoSampleRate.textContent = decoded ? `${(decoded.sampleRate / 1000).toFixed(decoded.sampleRate % 1000 === 0 ? 0 : 1)} kHz` : "Unavailable";
+  elements.fileInfoChannels.textContent = decoded
+    ? decoded.numberOfChannels === 1 ? "Mono" : decoded.numberOfChannels === 2 ? "Stereo" : `${decoded.numberOfChannels} channels`
+    : "Unavailable";
+  elements.fileInfoDecodeStatus.textContent = decodeStatus;
+}
+
+function setFileStatus(message, stateName = "idle") {
+  elements.audioFileStatus.textContent = message;
+  elements.audioFileStatus.dataset.state = stateName;
+}
+
 function getDecodeContext() {
   if (!decodeContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -102,10 +151,20 @@ export async function loadAudioFile(file, onReady = () => {}) {
   if (!file) return;
 
   pausePlayback();
+  updateFileInformation(file, null, "Reading");
+  setFileStatus("Reading audio file…", "active");
   elements.loadButton.classList.add("is-busy");
   elements.loadButtonText.textContent = "Loading…";
   state.analysisReady = false;
+  state.analysis = null;
+  state.decodedAudioBuffer = null;
   state.hasAudio = false;
+  state.loopReady = false;
+  state.loopWaveformPeaks = null;
+  state.magnitudes.fill(0);
+  state.lowFreqMagnitude = 0;
+  elements.audioName.textContent = file.name;
+  elements.progressContainer.style.display = "none";
   setLoopControlsEnabled(false);
   elements.playButton.disabled = true;
 
@@ -114,6 +173,8 @@ export async function loadAudioFile(file, onReady = () => {}) {
     const arrayBuffer = await readFileWithProgress(file);
 
     setLoadProgress(0.6, "Decoding audio…");
+    updateFileInformation(file, null, "Decoding");
+    setFileStatus("Decoding audio…", "active");
     const decoded = await getDecodeContext().decodeAudioData(
       arrayBuffer.slice(0)
     );
@@ -151,6 +212,8 @@ export async function loadAudioFile(file, onReady = () => {}) {
 
     state.decodedAudioBuffer = decoded;
     state.fileName = file.name;
+    updateFileInformation(file, decoded, "Analyzing");
+    setFileStatus("Building analysis data…", "active");
     state.hasAudio = true;
     state.loopWaveformPeaks = computeWaveformPeaks(decoded);
     state.loopStart = 0;
@@ -166,10 +229,14 @@ export async function loadAudioFile(file, onReady = () => {}) {
     resetSimulation();
 
     await reanalyzeCurrentBuffer();
+    updateFileInformation(file, decoded, state.analysisReady ? "Ready" : "Analysis failed");
+    setFileStatus(state.analysisReady ? "Audio ready." : "Audio decoded, but analysis failed.", state.analysisReady ? "done" : "error");
     onReady();
   } catch (error) {
     console.error("Failed to load audio:", error);
     elements.audioName.textContent = "Load failed – try again";
+    updateFileInformation(file, null, "Failed");
+    setFileStatus("Audio could not be loaded or decoded. Try another supported audio file.", "error");
     hideLoadProgress();
     hideAnalysisProgress();
   } finally {

@@ -114,7 +114,9 @@ function bandBinRange(minimumHz, maximumHz, sampleRate, binCount) {
 
 /**
  * Analyze the decoded buffer into a per-frame magnitude timeline.
- * Returns { fps, frameCount, bands, low, flux }.
+ * Returns a deterministic per-frame analysis timeline including frequency
+ * bands, low-frequency energy, spectral flux, spectral centroid and the
+ * references required by amplitude-normalization modes.
  */
 export async function analyzeAudioBuffer(
   audioBuffer,
@@ -143,6 +145,9 @@ export async function analyzeAudioBuffer(
   const bands = FREQ_BANDS.map(() => new Float32Array(frameCount));
   const low = new Float32Array(frameCount);
   const flux = new Float32Array(frameCount);
+  const centroid = new Float32Array(frameCount);
+  const overall = new Float32Array(frameCount);
+  const adaptivePeak = new Float32Array(frameCount);
 
   const bandRanges = FREQ_BANDS.map((band) =>
     bandBinRange(band.min, band.max, sampleRate, binCount)
@@ -170,6 +175,8 @@ export async function analyzeAudioBuffer(
 
     const { real, imaginary } = workspace;
     let fluxSum = 0;
+    let centroidWeighted = 0;
+    let centroidMagnitude = 0;
 
     for (let bin = 0; bin < binCount; bin += 1) {
       const magnitude =
@@ -189,17 +196,39 @@ export async function analyzeAudioBuffer(
       const difference = normalized[bin] - previousNormalized[bin];
       if (difference > 0) fluxSum += difference;
       previousNormalized[bin] = normalized[bin];
+
+      const frequencyHz = (bin * sampleRate) / fftSize;
+      if (frequencyHz >= 20 && frequencyHz <= Math.min(20000, sampleRate / 2)) {
+        centroidWeighted += frequencyHz * normalized[bin];
+        centroidMagnitude += normalized[bin];
+      }
     }
 
     flux[frameIndex] = fluxSum / binCount;
 
+    let bandTotal = 0;
     for (let bandIndex = 0; bandIndex < bandRanges.length; bandIndex += 1) {
       const { minimumBin, maximumBin } = bandRanges[bandIndex];
       let sum = 0;
       for (let bin = minimumBin; bin < maximumBin; bin += 1) {
         sum += normalized[bin];
       }
-      bands[bandIndex][frameIndex] = sum / (maximumBin - minimumBin);
+      const bandValue = sum / (maximumBin - minimumBin);
+      bands[bandIndex][frameIndex] = bandValue;
+      bandTotal += bandValue;
+    }
+    overall[frameIndex] = bandTotal / Math.max(1, bandRanges.length);
+
+    if (centroidMagnitude > 1e-5) {
+      const centroidHz = centroidWeighted / centroidMagnitude;
+      const maxHz = Math.min(20000, sampleRate / 2);
+      centroid[frameIndex] = clamp(
+        Math.log(Math.max(20, centroidHz) / 20) / Math.log(maxHz / 20),
+        0,
+        1
+      );
+    } else {
+      centroid[frameIndex] = 0.5;
     }
 
     let lowSum = 0;
@@ -216,8 +245,44 @@ export async function analyzeAudioBuffer(
     }
   }
 
+  // Percentile-based track peak is more robust than one clipped frame.
+  const sortedOverall = Array.from(overall).sort((a, b) => a - b);
+  const percentileIndex = Math.min(
+    sortedOverall.length - 1,
+    Math.max(0, Math.floor(sortedOverall.length * 0.98))
+  );
+  const trackPeak = Math.max(0.05, sortedOverall[percentileIndex] || 0.05);
+
+  // Precompute a time-based adaptive reference so preview and deterministic
+  // export use the same gain envelope at a given source timestamp.
+  const frameDelta = 1 / Math.max(1, fps);
+  const attack = 1 - Math.exp(-frameDelta / 0.08);
+  const release = 1 - Math.exp(-frameDelta / 1.2);
+  let adaptive = Math.max(0.08, overall[0] || 0);
+  for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+    const signal = overall[frameIndex];
+    const factor = signal > adaptive ? attack : release;
+    adaptive += (signal - adaptive) * factor;
+    adaptive = Math.max(0.08, adaptive);
+    adaptivePeak[frameIndex] = adaptive;
+  }
+
   onProgress(1);
-  return { fps, frameCount, bands, low, flux, duration };
+  return {
+    fps, frameCount, bands, low, flux, centroid, overall, adaptivePeak,
+    trackPeak, duration
+  };
+}
+
+function normalizeAmplitude(rawValue, referenceValue = 1) {
+  const gain = clamp(Number(state.inputGain) || 1, 0.25, 4);
+  const floor = clamp((Number(state.noiseFloor) || 0) / 100, 0, 0.3);
+  const dynamicRange = clamp(Number(state.dynamicRange) || 60, 24, 96);
+  const adjusted = Math.max(0, rawValue * gain - floor);
+  const reference = Math.max(0.04, referenceValue * gain - floor);
+  const normalized = clamp(adjusted / reference, 0, 1);
+  const exponent = 60 / dynamicRange;
+  return clamp(Math.pow(normalized, exponent), 0, 1);
 }
 
 /** Write the magnitudes for a given playhead time into shared state. */
@@ -235,10 +300,23 @@ export function sampleAnalysisAtTime(seconds) {
     analysis.frameCount - 1
   );
 
-  for (let bandIndex = 0; bandIndex < analysis.bands.length; bandIndex += 1) {
-    state.magnitudes[bandIndex] = analysis.bands[bandIndex][frameIndex];
+  let reference = 1;
+  if (state.amplitudeMode === "track") {
+    reference = analysis.trackPeak || 1;
+  } else if (state.amplitudeMode === "adaptive") {
+    reference = analysis.adaptivePeak?.[frameIndex] || analysis.trackPeak || 1;
   }
-  state.lowFreqMagnitude = analysis.low[frameIndex];
+
+  for (let bandIndex = 0; bandIndex < analysis.bands.length; bandIndex += 1) {
+    state.magnitudes[bandIndex] = normalizeAmplitude(
+      analysis.bands[bandIndex][frameIndex],
+      reference
+    );
+  }
+  state.lowFreqMagnitude = normalizeAmplitude(analysis.low[frameIndex], reference);
+  state.spectralCentroid = analysis.centroid?.[frameIndex] ?? 0.5;
+  state.spectralEnergy = normalizeAmplitude(analysis.overall?.[frameIndex] || 0, reference);
+  state.adaptiveReference = analysis.adaptivePeak?.[frameIndex] || 0;
 }
 
 /** Reduce the decoded buffer to min/max peak pairs for the loop waveform. */

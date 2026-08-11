@@ -21,9 +21,26 @@ import {
   exportPng,
   exportVideo,
   requestVideoExportCancel,
+  updateExportEstimate,
   updateVideoExportFormatUi
 } from "./export.js";
 import { loadAudioFile, reanalyzeCurrentBuffer } from "./loader.js";
+import { renderHudPreview } from "./hud.js";
+import {
+  beginHistory,
+  cancelHistory,
+  commitHistory,
+  redoSettings,
+  syncHistoryButtons,
+  undoSettings
+} from "./history.js";
+import {
+  applyQualityPreset,
+  markQualityCustom,
+  updateAutoQuality,
+  updateQualityStatus
+} from "./quality.js";
+import { applySettingsSnapshot, parseSettingsFile } from "./settings.js";
 import {
   applyLoopBars,
   drawLoopWaveform,
@@ -70,9 +87,16 @@ function bindControls() {
   // Audio resolution
   bindSelect(elements.fftSize, "fftSize", scheduleReanalysis, Number);
   bindRange(elements.smoothing, elements.smoothingValue, "smoothing", scheduleReanalysis);
+  bindSelect(elements.amplitudeMode, "amplitudeMode");
+  bindRange(elements.inputGain, elements.inputGainValue, "inputGain");
+  bindRange(elements.noiseFloor, elements.noiseFloorValue, "noiseFloor");
+  bindRange(elements.dynamicRange, elements.dynamicRangeValue, "dynamicRange");
 
   // Viewport
-  bindSelect(elements.viewportPreset, "viewportPreset", () => fitViewport());
+  bindSelect(elements.viewportPreset, "viewportPreset", () => {
+    fitViewport();
+    updateExportEstimate();
+  });
 
   // Camera
   bindSelect(elements.cameraPreset, "cameraPreset");
@@ -81,6 +105,14 @@ function bindControls() {
   bindRange(elements.cameraDistance, elements.cameraDistanceValue, "cameraDistance");
   bindRange(elements.cameraElevation, elements.cameraElevationValue, "cameraElevation");
   bindRange(elements.cameraAzimuth, elements.cameraAzimuthValue, "cameraAzimuth");
+
+  // HUD
+  bindToggle(elements.hudEnabled, "hudEnabled", renderHudPreview);
+  bindRange(elements.hudOpacity, elements.hudOpacityValue, "hudOpacity", renderHudPreview);
+  bindRange(elements.hudScale, elements.hudScaleValue, "hudScale", renderHudPreview);
+
+  // Performance
+  bindSelect(elements.qualityPreset, "qualityPreset", applyQualityPreset);
 
   // Particles
   bindRange(elements.reactivity, elements.reactivityValue, "reactivity");
@@ -98,9 +130,11 @@ function bindControls() {
   bindRange(elements.visualizationSize, elements.visualizationSizeValue, "visualizationSize");
   bindRange(elements.minParticles, elements.minParticlesValue, "minParticles", (value) => {
     if (value > state.maxParticles) setControlValue("maxParticles", value);
+    markQualityCustom();
   });
   bindRange(elements.maxParticles, elements.maxParticlesValue, "maxParticles", (value) => {
     if (value < state.minParticles) setControlValue("minParticles", value);
+    markQualityCustom();
   });
   bindRange(elements.particleSize, elements.particleSizeValue, "particleSize");
   bindRange(elements.particleOpacity, elements.particleOpacityValue, "particleOpacity");
@@ -130,12 +164,13 @@ function bindControls() {
   bindRange(elements.beatSensitivity, elements.beatSensitivityValue, "beatSensitivity");
 
   // Export format
-  bindSelect(elements.exportResolution, "videoResolution");
-  bindSelect(elements.videoFileType, "videoFileType", () =>
-    updateVideoExportFormatUi(true)
-  );
-  bindSelect(elements.videoFrameRate, "videoFrameRate", () => {}, Number);
-  bindSelect(elements.videoBitrate, "videoBitrateMbps", () => {}, Number);
+  bindSelect(elements.exportResolution, "videoResolution", updateExportEstimate);
+  bindSelect(elements.videoFileType, "videoFileType", () => {
+    updateVideoExportFormatUi(true);
+    updateExportEstimate();
+  });
+  bindSelect(elements.videoFrameRate, "videoFrameRate", updateExportEstimate, Number);
+  bindSelect(elements.videoBitrate, "videoBitrateMbps", updateExportEstimate, Number);
 
 }
 
@@ -212,19 +247,27 @@ function bindLoopControls() {
   initializeLoopEditor();
 
   elements.loopBpmValue.addEventListener("change", (event) => {
+    beginHistory("Change loop BPM");
     state.loopBpm = clamp(Number(event.target.value) || 120, 40, 300);
     event.target.value = String(state.loopBpm);
     updateLoopSelectionUi();
+    updateExportEstimate();
+    commitHistory("Change loop BPM");
   });
 
   elements.loopBarsValue.addEventListener("change", (event) => {
+    beginHistory("Change loop bars");
     state.loopBars = clamp(Number(event.target.value) || 4, 1, 999);
     event.target.value = String(state.loopBars);
     applyLoopBars();
+    updateExportEstimate();
+    commitHistory("Change loop bars");
   });
 
   elements.loopSnap.addEventListener("change", (event) => {
+    beginHistory("Change loop snapping");
     state.loopSnap = event.target.checked;
+    commitHistory("Change loop snapping");
   });
 
   elements.detectBpm.addEventListener("click", runBpmDetection);
@@ -238,8 +281,28 @@ function bindExportControls() {
   elements.exportVideo.addEventListener("click", exportVideo);
   elements.exportPng.addEventListener("click", exportPng);
   elements.exportJson.addEventListener("click", exportJson);
+  elements.importJson.addEventListener("click", () => elements.importJsonFile.click());
+  elements.importJsonFile.addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const settings = await parseSettingsFile(file);
+      beginHistory("Import settings");
+      await applySettingsSnapshot(settings);
+      commitHistory("Import settings");
+      elements.settingsStatus.textContent = "Settings imported successfully.";
+      elements.settingsStatus.dataset.state = "done";
+    } catch (error) {
+      cancelHistory();
+      console.error("Settings import failed", error);
+      elements.settingsStatus.textContent = error.message || "Settings import failed.";
+      elements.settingsStatus.dataset.state = "error";
+    }
+  });
   elements.exportCancel.addEventListener("click", requestVideoExportCancel);
   updateVideoExportFormatUi(true);
+  updateExportEstimate();
 }
 
 /* ---------------------------------------------------------------------------
@@ -249,35 +312,72 @@ async function handleFile(file) {
   await loadAudioFile(file, () => {
     drawLoopWaveform();
     updateLoopSelectionUi();
+    updateExportEstimate();
   });
 }
 
 function bindDragAndDrop() {
-  let dragCounter = 0;
+  let dragDepth = 0;
+  const supportedExtensions = new Set(["wav", "mp3", "m4a", "aac", "ogg", "flac"]);
+
+  const isSupportedAudio = (file) => {
+    if (!file) return false;
+    if (file.type?.startsWith("audio/")) return true;
+    const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+    return supportedExtensions.has(extension);
+  };
+
+  const hideOverlay = () => {
+    dragDepth = 0;
+    elements.dragOverlay.classList.remove("active", "is-invalid");
+    elements.dragOverlay.setAttribute("aria-hidden", "true");
+    elements.dragFileName.textContent = "mp3 · wav · m4a · ogg · flac · aac";
+  };
 
   document.addEventListener("dragenter", (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) return;
     event.preventDefault();
-    dragCounter += 1;
-    if (event.dataTransfer.types.includes("Files")) {
-      elements.dragOverlay.classList.add("active");
+    dragDepth += 1;
+    elements.dragOverlay.classList.add("active");
+    elements.dragOverlay.setAttribute("aria-hidden", "false");
+  });
+  document.addEventListener("dragleave", (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) hideOverlay();
+  });
+  document.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      const valid = isSupportedAudio(file) && event.dataTransfer.files.length === 1;
+      elements.dragOverlay.classList.toggle("is-invalid", !valid);
+      elements.dragFileName.textContent = event.dataTransfer.files.length > 1
+        ? "Drop one audio file at a time"
+        : file.name;
     }
   });
-  document.addEventListener("dragleave", () => {
-    dragCounter -= 1;
-    if (dragCounter <= 0) {
-      dragCounter = 0;
-      elements.dragOverlay.classList.remove("active");
-    }
-  });
-  document.addEventListener("dragover", (event) => event.preventDefault());
   document.addEventListener("drop", async (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) return;
     event.preventDefault();
-    dragCounter = 0;
-    elements.dragOverlay.classList.remove("active");
-    const file = event.dataTransfer.files[0];
-    if (!file || !file.type.startsWith("audio/")) return;
+    const files = Array.from(event.dataTransfer.files || []);
+    hideOverlay();
+    if (files.length !== 1) {
+      elements.audioFileStatus.textContent = "Drop exactly one audio file at a time.";
+      elements.audioFileStatus.dataset.state = "error";
+      return;
+    }
+    const file = files[0];
+    if (!isSupportedAudio(file)) {
+      elements.audioFileStatus.textContent = "Unsupported file. Try WAV, MP3, M4A, AAC, OGG or FLAC.";
+      elements.audioFileStatus.dataset.state = "error";
+      return;
+    }
     await handleFile(file);
   });
+  window.addEventListener("blur", hideOverlay);
 }
 
 /* ---------------------------------------------------------------------------
@@ -290,6 +390,19 @@ function bindKeyboardShortcuts() {
       target instanceof HTMLElement &&
       target.matches("input, select, textarea")
     ) {
+      return;
+    }
+
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redoSettings(applySettingsSnapshot);
+      else undoSettings(applySettingsSnapshot);
+      return;
+    }
+    if (modifier && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      redoSettings(applySettingsSnapshot);
       return;
     }
 
@@ -341,6 +454,9 @@ function tick(timestamp) {
       ? 1 / 60
       : clamp((timestamp - lastTimestamp) / 1000, 0.001, 0.05);
   lastTimestamp = timestamp;
+  const instantaneousFps = 1 / Math.max(0.001, deltaTime);
+  state.previewFps += (instantaneousFps - state.previewFps) * 0.08;
+  updateAutoQuality(deltaTime, state.previewFps);
 
   if (state.hasAudio) {
     enforceLoopRange();
@@ -350,6 +466,7 @@ function tick(timestamp) {
   }
 
   renderFrame(deltaTime, state.isPlaying);
+  renderHudPreview();
 
   elements.beatFlash.style.opacity = state.beatFlashEnabled
     ? String(state.flashAlpha)
@@ -372,8 +489,19 @@ function boot() {
   bindExportControls();
   bindDragAndDrop();
   bindKeyboardShortcuts();
+  syncHistoryButtons();
 
+  elements.undoButton.addEventListener("click", () => undoSettings(applySettingsSnapshot));
+  elements.redoButton.addEventListener("click", () => redoSettings(applySettingsSnapshot));
   elements.resetButton.addEventListener("click", resetAll);
+
+  window.addEventListener("visualizer-settings-applied", () => {
+    updateVideoExportFormatUi(true);
+    updateExportEstimate();
+    updateQualityStatus();
+    renderHudPreview();
+  });
+  window.addEventListener("visualizer-loop-changed", updateExportEstimate);
 
   applyVolume();
   updateLoopButtonState();
@@ -383,6 +511,9 @@ function boot() {
   drawLoopWaveform();
   updateLoopSelectionUi();
   resetSimulation();
+  updateQualityStatus();
+  updateExportEstimate();
+  renderHudPreview();
 
   window.addEventListener("resize", () => {
     fitViewport();

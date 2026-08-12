@@ -73,6 +73,41 @@ function drawMeters(context, x, y, width, scale) {
   });
 }
 
+function drawBottomRightStatus(context, width, height, contentInset, scale, opacity) {
+  const blockWidth = Math.min(width * 0.24, 190 * scale);
+  const right = width - contentInset;
+  const bottom = height - contentInset;
+  const barHeight = Math.max(2, 4 * scale);
+  const energy = Math.max(0, Math.min(1, Number(state.spectralEnergy) || 0));
+
+  context.save();
+  context.globalAlpha = opacity;
+  context.textAlign = "right";
+  context.textBaseline = "bottom";
+  context.font = `600 ${Math.max(8, 8.5 * scale)}px ${HUD_FONT}`;
+  context.fillStyle = "rgba(255,255,255,0.62)";
+  context.fillText("MASTER ENERGY", right, bottom - 28 * scale);
+
+  const barY = bottom - 22 * scale;
+  context.fillStyle = "rgba(255,255,255,0.12)";
+  context.fillRect(right - blockWidth, barY, blockWidth, barHeight);
+  context.fillStyle = "rgba(255,255,255,0.78)";
+  context.fillRect(right - blockWidth, barY, blockWidth * energy, barHeight);
+
+  context.fillStyle = "rgba(255,255,255,0.62)";
+  context.fillText(
+    `FFT ${state.fftSize}  /  SIZE ${Math.round(state.visualizationSize)}%`,
+    right,
+    bottom - 7 * scale
+  );
+  context.fillText(
+    `QUALITY ${titleCase(state.qualityPreset)}`,
+    right,
+    bottom + 5 * scale
+  );
+  context.restore();
+}
+
 export function drawHud(context, width, height) {
   if (!state.hudEnabled || !context || width <= 0 || height <= 0) return;
 
@@ -149,6 +184,8 @@ export function drawHud(context, width, height) {
     meterWidth,
     scale
   );
+
+  drawBottomRightStatus(context, width, height, contentInset, scale, opacity);
 
   context.restore();
 }

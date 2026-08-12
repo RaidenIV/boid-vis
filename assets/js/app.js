@@ -104,6 +104,13 @@ function bindControls() {
   bindRange(elements.cameraDistance, elements.cameraDistanceValue, "cameraDistance");
   bindRange(elements.cameraElevation, elements.cameraElevationValue, "cameraElevation");
   bindRange(elements.cameraAzimuth, elements.cameraAzimuthValue, "cameraAzimuth");
+  elements.centerVisualization?.addEventListener("click", () => {
+    beginHistory("Center visualization");
+    setControlValue("cameraElevation", 0);
+    setControlValue("cameraAzimuth", 0);
+    state.cameraFollowAzimuth = 0;
+    commitHistory("Center visualization");
+  });
 
   // HUD
   bindToggle(elements.hudEnabled, "hudEnabled", renderHudPreview);

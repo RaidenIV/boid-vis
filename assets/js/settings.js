@@ -16,7 +16,11 @@ const MAX_SETTINGS_FILE_BYTES = 1024 * 1024;
 const ENUMS = {
   amplitudeMode: new Set(["fixed", "track", "adaptive"]),
   viewportPreset: new Set(["fill", "landscape", "square", "portrait"]),
-  cameraPreset: new Set(["static", "orbit", "figure8", "pushPull", "drift", "spectralCentroid"]),
+  cameraPreset: new Set([
+    "static", "orbit", "horizontalOrbit", "verticalArc", "helix",
+    "pendulum", "cinematicSweep", "figure8", "pushPull", "drift",
+    "spectralCentroid"
+  ]),
   qualityPreset: new Set(["custom", "performance", "balanced", "high", "maximum", "auto"]),
   boidType: new Set(["flow", "flock", "swarm", "vortex", "orbit", "liquid", "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras", "morph"]),
   morphScope: new Set(["all", "boids", "attractors"]),

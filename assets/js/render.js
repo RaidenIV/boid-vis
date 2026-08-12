@@ -169,6 +169,9 @@ const ORIENTATION_QUATERNIONS = (() => {
 const DISPLAY_QUATERNION = new Float64Array(4);
 const SLERP_A = new Float64Array(4);
 const SLERP_B = new Float64Array(4);
+// Morph blends several systems with different natural centroids. Keep the
+// *presentation* anchored without altering simulation coordinates.
+const DISPLAY_CENTER = new Float64Array(3);
 
 /**
  * Euler triple to quaternion, matching the order the display rotation is
@@ -471,6 +474,37 @@ function getEffectiveVisualizationScale() {
   return RENDER_SCALE * (state.visualizationSize / 100) * getViewportVisualizationMultiplier();
 }
 
+/**
+ * Morph can blend simulations whose natural centroids differ. Compute a stable
+ * render-only center from an evenly distributed sample so the visual subject
+ * stays centered while the underlying particle coordinates remain untouched.
+ */
+function updateDisplayCenter() {
+  DISPLAY_CENTER[0] = 0;
+  DISPLAY_CENTER[1] = 0;
+  DISPLAY_CENTER[2] = 0;
+  if (state.boidType !== "morph" || state.activeCount < 1) return;
+
+  const sampleCount = Math.min(state.activeCount, 1024);
+  const stride = state.activeCount / sampleCount;
+  for (let sample = 0; sample < sampleCount; sample += 1) {
+    const particle = particles[Math.min(state.activeCount - 1, Math.floor(sample * stride))];
+    writeDisplayPoint(
+      DISPLAY_POINT,
+      particle.positionX,
+      particle.positionY,
+      particle.positionZ,
+      DISPLAY_QUATERNION
+    );
+    DISPLAY_CENTER[0] += DISPLAY_POINT[0];
+    DISPLAY_CENTER[1] += DISPLAY_POINT[1];
+    DISPLAY_CENTER[2] += DISPLAY_POINT[2];
+  }
+  DISPLAY_CENTER[0] /= sampleCount;
+  DISPLAY_CENTER[1] /= sampleCount;
+  DISPLAY_CENTER[2] /= sampleCount;
+}
+
 function updateParticleGeometry() {
   const activeCount = state.activeCount;
   const visualizationScale = getEffectiveVisualizationScale();
@@ -484,9 +518,9 @@ function updateParticleGeometry() {
       particle.positionZ,
       DISPLAY_QUATERNION
     );
-    swarm.positions[offset] = DISPLAY_POINT[0] * visualizationScale;
-    swarm.positions[offset + 1] = DISPLAY_POINT[1] * visualizationScale;
-    swarm.positions[offset + 2] = DISPLAY_POINT[2] * visualizationScale;
+    swarm.positions[offset] = (DISPLAY_POINT[0] - DISPLAY_CENTER[0]) * visualizationScale;
+    swarm.positions[offset + 1] = (DISPLAY_POINT[1] - DISPLAY_CENTER[1]) * visualizationScale;
+    swarm.positions[offset + 2] = (DISPLAY_POINT[2] - DISPLAY_CENTER[2]) * visualizationScale;
     swarm.colors[offset] = particle.colorR;
     swarm.colors[offset + 1] = particle.colorG;
     swarm.colors[offset + 2] = particle.colorB;
@@ -558,9 +592,9 @@ function updateTrailGeometry() {
         history[offset + 2],
         DISPLAY_QUATERNION
       );
-      const pointX = DISPLAY_POINT[0] * visualizationScale;
-      const pointY = DISPLAY_POINT[1] * visualizationScale;
-      const pointZ = DISPLAY_POINT[2] * visualizationScale;
+      const pointX = (DISPLAY_POINT[0] - DISPLAY_CENTER[0]) * visualizationScale;
+      const pointY = (DISPLAY_POINT[1] - DISPLAY_CENTER[1]) * visualizationScale;
+      const pointZ = (DISPLAY_POINT[2] - DISPLAY_CENTER[2]) * visualizationScale;
 
       if (step > 0) {
         // Squared falloff keeps the head bright and lets the tail die quickly,
@@ -840,6 +874,41 @@ function updateCamera(deltaTime, playing) {
       y = Math.sin(angle) * radius;
       break;
     }
+    case "horizontalOrbit": {
+      const angle = time * 0.42;
+      const orbitAmount = clamp(amount, 0, 2);
+      x = Math.sin(angle) * distance * orbitAmount;
+      z = distance * (1 - orbitAmount) + Math.cos(angle) * distance * orbitAmount;
+      y = Math.sin(time * 0.21) * distance * 0.08 * orbitAmount;
+      break;
+    }
+    case "verticalArc": {
+      const angle = Math.sin(time * 0.38) * Math.PI * 0.34 * clamp(amount, 0, 2);
+      y = Math.sin(angle) * distance;
+      z = Math.max(5, Math.cos(angle) * distance);
+      x = Math.sin(time * 0.19) * radius * 0.25;
+      break;
+    }
+    case "helix": {
+      const angle = time * 0.4;
+      const orbitAmount = clamp(amount, 0, 2);
+      x = Math.sin(angle) * distance * orbitAmount;
+      z = distance * (1 - orbitAmount) + Math.cos(angle) * distance * orbitAmount;
+      y = Math.sin(time * 0.18) * distance * 0.3 * orbitAmount;
+      break;
+    }
+    case "pendulum": {
+      x = Math.sin(time * 0.52) * radius * 1.15;
+      y = Math.sin(time * 0.26 + 0.8) * radius * 0.28;
+      z = Math.max(5, distance + Math.cos(time * 0.52) * radius * 0.18);
+      break;
+    }
+    case "cinematicSweep": {
+      x = Math.sin(time * 0.22) * radius * 1.35;
+      y = Math.sin(time * 0.15 + 1.1) * radius * 0.42;
+      z = Math.max(5, distance + Math.cos(time * 0.27) * radius * 0.34);
+      break;
+    }
     case "figure8": {
       const angle = time * 0.5;
       x = Math.sin(angle) * radius;
@@ -971,6 +1040,7 @@ export function renderFrame(deltaTime, playing) {
 
   // Resolved once per frame and shared by both geometry builders.
   updateDisplayQuaternion();
+  updateDisplayCenter();
   updateParticleGeometry();
   updateTrailGeometry();
   updateCamera(deltaTime, playing);

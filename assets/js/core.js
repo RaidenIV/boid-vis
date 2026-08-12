@@ -149,6 +149,7 @@ export const elements = {
   cameraElevationValue: byId("camera-elevation-value"),
   cameraAzimuth: byId("camera-azimuth"),
   cameraAzimuthValue: byId("camera-azimuth-value"),
+  centerVisualization: byId("center-visualization"),
 
   // HUD
   hudEnabled: byId("hud-enabled"),

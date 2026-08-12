@@ -212,6 +212,11 @@
                             <select id="camera-preset">
                                 <option value="static" selected>Static</option>
                                 <option value="orbit">Orbit</option>
+                                <option value="horizontalOrbit">Orbit — Horizontal</option>
+                                <option value="verticalArc">Vertical Arc</option>
+                                <option value="helix">Helix</option>
+                                <option value="pendulum">Pendulum</option>
+                                <option value="cinematicSweep">Cinematic Sweep</option>
                                 <option value="figure8">Figure Eight</option>
                                 <option value="pushPull">Push / Pull</option>
                                 <option value="drift">Drift</option>
@@ -243,6 +248,7 @@
                             <div class="value-editor"><input class="value-input" id="camera-azimuth-value" type="number" min="-180" max="180" step="1" value="0" aria-label="Camera Azimuth Value"><span class="value-suffix" aria-hidden="true">°</span></div>
                             <input type="range" id="camera-azimuth" min="-180" max="180" step="1" value="0">
                         </div>
+                        <button id="center-visualization" class="secondary" type="button">Center Visualization</button>
                     </div>
                 </section>
 
@@ -339,6 +345,24 @@
                     </div>
                     <div class="collapsible-content" id="sectionParticles">
                         <div class="control">
+                            <label for="boid-type">Simulation Type</label>
+                            <select id="boid-type">
+                                <option value="flow" selected>Flow — Original</option>
+                                <option value="flock">Flock</option>
+                                <option value="swarm">Swarm</option>
+                                <option value="vortex">Vortex</option>
+                                <option value="orbit">Orbit</option>
+                                <option value="liquid">Liquid</option>
+                                <option value="lorenz">Attractor — Lorenz</option>
+                                <option value="rossler">Attractor — Rössler</option>
+                                <option value="halvorsen">Attractor — Halvorsen</option>
+                                <option value="aizawa">Attractor — Aizawa</option>
+                                <option value="thomas">Attractor — Thomas</option>
+                                <option value="dadras">Attractor — Dadras</option>
+                                <option value="morph">Morph</option>
+                            </select>
+                        </div>
+                        <div class="control">
                             <label for="reactivity-slider">Reactivity</label>
                             <div class="value-editor"><input class="value-input" id="reactivity-value" type="number" min="10" max="300" step="1" value="100" aria-label="Reactivity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
                             <input type="range" id="reactivity-slider" min="10" max="300" step="1" value="100">
@@ -352,24 +376,6 @@
                                 </div>
                             </div>
                             <div class="collapsible-content" id="clusterBoids">
-                                <div class="control">
-                                    <label for="boid-type">Simulation Type</label>
-                                    <select id="boid-type">
-                                        <option value="flow" selected>Flow — Original</option>
-                                        <option value="flock">Flock</option>
-                                        <option value="swarm">Swarm</option>
-                                        <option value="vortex">Vortex</option>
-                                        <option value="orbit">Orbit</option>
-                                        <option value="liquid">Liquid</option>
-                                        <option value="lorenz">Attractor — Lorenz</option>
-                                        <option value="rossler">Attractor — Rössler</option>
-                                        <option value="halvorsen">Attractor — Halvorsen</option>
-                                        <option value="aizawa">Attractor — Aizawa</option>
-                                        <option value="thomas">Attractor — Thomas</option>
-                                        <option value="dadras">Attractor — Dadras</option>
-                                        <option value="morph">Morph</option>
-                                    </select>
-                                </div>
                                 <div class="control" id="morph-scope-control" hidden>
                                     <label for="morph-scope">Morph Between</label>
                                     <select id="morph-scope">

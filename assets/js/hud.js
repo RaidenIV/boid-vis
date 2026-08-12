@@ -51,59 +51,113 @@ function drawCornerTicks(context, width, height, inset, tick) {
   context.stroke();
 }
 
-function drawMeters(context, x, y, width, scale) {
-  const rowHeight = 11 * scale;
-  const labelWidth = 64 * scale;
-  const meterWidth = Math.max(48 * scale, width - labelWidth);
-  context.font = `${Math.max(8, 8.5 * scale)}px ${HUD_FONT}`;
-  context.textBaseline = "middle";
+function drawSpectralPanel(context, x, bottom, width, scale) {
+  const rowHeight = 11.5 * scale;
+  const headerHeight = 17 * scale;
+  const labelWidth = 62 * scale;
+  const valueWidth = 28 * scale;
+  const gap = 7 * scale;
+  const meterWidth = Math.max(42 * scale, width - labelWidth - valueWidth - gap);
+  const top = bottom - headerHeight - FREQ_BANDS.length * rowHeight;
 
+  context.save();
+  context.textBaseline = "top";
+  context.textAlign = "left";
+  context.font = `600 ${Math.max(8, 8.5 * scale)}px ${HUD_FONT}`;
+  context.fillStyle = "rgba(255,255,255,0.78)";
+  context.fillText("SPECTRAL BANDS", x, top);
+  context.fillStyle = "rgba(255,255,255,0.28)";
+  context.fillRect(x, top + 12 * scale, width, Math.max(1, scale));
+
+  context.font = `${Math.max(7.5, 8 * scale)}px ${HUD_FONT}`;
+  context.textBaseline = "middle";
   FREQ_BANDS.forEach((band, index) => {
     const value = Math.max(0, Math.min(1, state.magnitudes[index] || 0));
-    const rowY = y + index * rowHeight;
-    context.fillStyle = "rgba(255,255,255,0.62)";
-    context.fillText(band.name.toUpperCase(), x, rowY + rowHeight * 0.5);
+    const rowY = top + headerHeight + index * rowHeight;
+    const centerY = rowY + rowHeight * 0.5;
     const barX = x + labelWidth;
-    const barY = rowY + 3 * scale;
-    const barHeight = Math.max(2, 4 * scale);
-    context.fillStyle = "rgba(255,255,255,0.12)";
+    const barY = centerY - Math.max(1, 1.75 * scale);
+    const barHeight = Math.max(2, 3.5 * scale);
+
+    context.textAlign = "left";
+    context.fillStyle = "rgba(255,255,255,0.58)";
+    context.fillText(band.name.toUpperCase(), x, centerY);
+
+    context.fillStyle = "rgba(255,255,255,0.11)";
     context.fillRect(barX, barY, meterWidth, barHeight);
     context.fillStyle = "rgba(255,255,255,0.78)";
     context.fillRect(barX, barY, meterWidth * value, barHeight);
+
+    context.textAlign = "right";
+    context.fillStyle = "rgba(255,255,255,0.48)";
+    context.fillText(`${Math.round(value * 100)}%`, x + width, centerY);
   });
+  context.restore();
 }
 
 function drawBottomRightStatus(context, width, height, contentInset, scale, opacity) {
-  const blockWidth = Math.min(width * 0.24, 190 * scale);
+  const blockWidth = Math.min(width * 0.30, 230 * scale);
   const right = width - contentInset;
+  const left = right - blockWidth;
   const bottom = height - contentInset;
-  const barHeight = Math.max(2, 4 * scale);
+  const headerHeight = 17 * scale;
+  const rowHeight = 17 * scale;
+  const footerHeight = 24 * scale;
+  const top = bottom - headerHeight - rowHeight * 3 - footerHeight;
+  const barHeight = Math.max(2, 3.5 * scale);
   const energy = Math.max(0, Math.min(1, Number(state.spectralEnergy) || 0));
+  const centroid = Math.max(0, Math.min(1, Number(state.spectralCentroid) || 0.5));
+  const particleLoad = Math.max(0, Math.min(1,
+    (Number(state.activeCount) || 0) / Math.max(1, Number(state.maxParticles) || 1)
+  ));
+
+  const rows = [
+    ["MASTER ENERGY", energy, `${Math.round(energy * 100)}%`],
+    ["CENTROID", centroid, `${Math.round(centroid * 100)}%`],
+    ["PARTICLE LOAD", particleLoad, `${Math.round(state.activeCount || 0).toLocaleString()}`]
+  ];
 
   context.save();
   context.globalAlpha = opacity;
+  context.textBaseline = "top";
   context.textAlign = "right";
-  context.textBaseline = "bottom";
   context.font = `600 ${Math.max(8, 8.5 * scale)}px ${HUD_FONT}`;
-  context.fillStyle = "rgba(255,255,255,0.62)";
-  context.fillText("MASTER ENERGY", right, bottom - 28 * scale);
-
-  const barY = bottom - 22 * scale;
-  context.fillStyle = "rgba(255,255,255,0.12)";
-  context.fillRect(right - blockWidth, barY, blockWidth, barHeight);
   context.fillStyle = "rgba(255,255,255,0.78)";
-  context.fillRect(right - blockWidth, barY, blockWidth * energy, barHeight);
+  context.fillText("SYSTEM OUTPUT", right, top);
+  context.fillStyle = "rgba(255,255,255,0.28)";
+  context.fillRect(left, top + 12 * scale, blockWidth, Math.max(1, scale));
 
-  context.fillStyle = "rgba(255,255,255,0.62)";
+  rows.forEach(([label, value, display], index) => {
+    const rowTop = top + headerHeight + index * rowHeight;
+    context.font = `${Math.max(7.5, 8 * scale)}px ${HUD_FONT}`;
+    context.textBaseline = "top";
+    context.textAlign = "left";
+    context.fillStyle = "rgba(255,255,255,0.58)";
+    context.fillText(label, left, rowTop);
+    context.textAlign = "right";
+    context.fillStyle = "rgba(255,255,255,0.52)";
+    context.fillText(display, right, rowTop);
+
+    const barY = rowTop + 10 * scale;
+    context.fillStyle = "rgba(255,255,255,0.11)";
+    context.fillRect(left, barY, blockWidth, barHeight);
+    context.fillStyle = "rgba(255,255,255,0.78)";
+    context.fillRect(left, barY, blockWidth * value, barHeight);
+  });
+
+  const footerTop = top + headerHeight + rowHeight * 3 + 2 * scale;
+  context.font = `600 ${Math.max(7.5, 8 * scale)}px ${HUD_FONT}`;
+  context.textAlign = "right";
+  context.fillStyle = "rgba(255,255,255,0.48)";
   context.fillText(
-    `FFT ${state.fftSize}  /  SIZE ${Math.round(state.visualizationSize)}%`,
+    `FFT ${Number(state.fftSize).toLocaleString()}  /  SIZE ${Math.round(state.visualizationSize)}%`,
     right,
-    bottom - 7 * scale
+    footerTop
   );
   context.fillText(
-    `QUALITY ${titleCase(state.qualityPreset)}`,
+    `QUALITY ${titleCase(state.qualityPreset)}  /  ${getViewportLabel().toUpperCase()}`,
     right,
-    bottom + 5 * scale
+    footerTop + 10 * scale
   );
   context.restore();
 }
@@ -172,16 +226,12 @@ export function drawHud(context, width, height) {
   });
   context.textAlign = "left";
 
-  const meterWidth = Math.min(width * 0.28, 210 * scale);
-  const meterHeight = 7 * 11 * scale;
-  drawMeters(
+  const bottomPanelWidth = Math.min(width * 0.30, 230 * scale);
+  drawSpectralPanel(
     context,
     contentInset,
-    Math.max(
-      contentInset + leftLines.length * lineHeight + 8 * scale,
-      height - contentInset - meterHeight
-    ),
-    meterWidth,
+    height - contentInset,
+    bottomPanelWidth,
     scale
   );
 

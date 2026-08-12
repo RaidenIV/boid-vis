@@ -112,6 +112,62 @@ function bindControls() {
     commitHistory("Center visualization");
   });
 
+  // Mouse camera controls — drag to orbit the current preset and wheel to
+  // change camera distance. These update the existing camera controls rather
+  // than introducing a second camera state, so preview/export stay identical.
+  let cameraDrag = null;
+  let cameraWheelCommitTimer = null;
+  const normalizeAzimuth = (value) => {
+    const wrapped = ((value + 180) % 360 + 360) % 360 - 180;
+    return Math.round(wrapped);
+  };
+
+  elements.canvas?.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || state.isExportingPng || state.isExportingVideo) return;
+    beginHistory("Adjust camera with mouse");
+    cameraDrag = {
+      x: event.clientX,
+      y: event.clientY,
+      azimuth: state.cameraAzimuth,
+      elevation: state.cameraElevation
+    };
+    elements.canvas.classList.add("is-camera-dragging");
+    event.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (event) => {
+    if (!cameraDrag) return;
+    const dx = event.clientX - cameraDrag.x;
+    const dy = event.clientY - cameraDrag.y;
+    setControlValue("cameraAzimuth", normalizeAzimuth(cameraDrag.azimuth + dx * 0.25));
+    setControlValue("cameraElevation", clamp(cameraDrag.elevation - dy * 0.2, -89, 89));
+  });
+
+  const finishCameraDrag = () => {
+    if (!cameraDrag) return;
+    cameraDrag = null;
+    elements.canvas?.classList.remove("is-camera-dragging");
+    commitHistory("Adjust camera with mouse");
+  };
+  document.addEventListener("mouseup", finishCameraDrag);
+  window.addEventListener("blur", finishCameraDrag);
+
+  elements.canvas?.addEventListener("wheel", (event) => {
+    if (state.isExportingPng || state.isExportingVideo) return;
+    event.preventDefault();
+    beginHistory("Adjust camera distance with mouse");
+    const wheelSteps = Math.max(0.5, Math.min(4, Math.abs(event.deltaY) / 100 || 1));
+    const direction = Math.sign(event.deltaY || 1);
+    setControlValue(
+      "cameraDistance",
+      clamp(state.cameraDistance + direction * wheelSteps * 2, 20, 120)
+    );
+    window.clearTimeout(cameraWheelCommitTimer);
+    cameraWheelCommitTimer = window.setTimeout(() => {
+      commitHistory("Adjust camera distance with mouse");
+    }, 180);
+  }, { passive: false });
+
   // HUD
   bindToggle(elements.hudEnabled, "hudEnabled", renderHudPreview);
   bindRange(elements.hudOpacity, elements.hudOpacityValue, "hudOpacity", renderHudPreview);

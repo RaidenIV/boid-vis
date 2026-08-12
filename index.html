@@ -362,6 +362,22 @@
                                 <option value="morph">Morph</option>
                             </select>
                         </div>
+                        <div class="control" id="morph-scope-control" hidden>
+                            <label for="morph-scope">Morph Between</label>
+                            <select id="morph-scope">
+                                <option value="all" selected>All Simulation Types</option>
+                                <option value="boids">Boid Simulations Only</option>
+                                <option value="attractors">Chaotic Attractors Only</option>
+                            </select>
+                        </div>
+                        <div class="control">
+                            <label for="attractor-color-source">Color Source</label>
+                            <select id="attractor-color-source">
+                                <option value="speed" selected>Speed — Trajectory Velocity</option>
+                                <option value="lobe">Lobe — Wing Membership</option>
+                                <option value="radius">Radius — Distance From Center</option>
+                            </select>
+                        </div>
                         <div class="control">
                             <label for="reactivity-slider">Reactivity</label>
                             <div class="value-editor"><input class="value-input" id="reactivity-value" type="number" min="10" max="300" step="1" value="100" aria-label="Reactivity Value"><span class="value-suffix" aria-hidden="true">%</span></div>
@@ -376,14 +392,6 @@
                                 </div>
                             </div>
                             <div class="collapsible-content" id="clusterBoids">
-                                <div class="control" id="morph-scope-control" hidden>
-                                    <label for="morph-scope">Morph Between</label>
-                                    <select id="morph-scope">
-                                        <option value="all" selected>All Simulation Types</option>
-                                        <option value="boids">Boid Simulations Only</option>
-                                        <option value="attractors">Chaotic Attractors Only</option>
-                                    </select>
-                                </div>
                                 <div class="control" id="morph-speed-control" hidden>
                                     <label for="morph-speed">Morph Speed</label>
                                     <div class="value-editor"><input class="value-input" id="morph-speed-value" type="number" min="0.1" max="3" step="0.05" value="1" aria-label="Morph Speed Value"><span class="value-suffix" aria-hidden="true">×</span></div>
@@ -426,14 +434,6 @@
                                 </div>
                             </div>
                             <div class="collapsible-content" id="clusterAttractors">
-                                <div class="control">
-                                    <label for="attractor-color-source">Color Source</label>
-                                    <select id="attractor-color-source">
-                                        <option value="speed" selected>Speed — Trajectory Velocity</option>
-                                        <option value="lobe">Lobe — Wing Membership</option>
-                                        <option value="radius">Radius — Distance From Center</option>
-                                    </select>
-                                </div>
                                 <div class="control">
                                     <label for="traversal-floor">Traversal Floor</label>
                                     <div class="value-editor"><input class="value-input" id="traversal-floor-value" type="number" min="0" max="2" step="0.05" value="0.25" aria-label="Traversal Floor Value"><span class="value-suffix" aria-hidden="true">×</span></div>

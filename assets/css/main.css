@@ -1174,3 +1174,15 @@ progress::-moz-progress-bar {
     background: rgba(248,113,113,0.10);
     border-color: rgba(248,113,113,0.70);
 }
+
+/* Expanded collapsible titles use the primary UI accent. */
+.section:not(.is-collapsed) > .collapsible-header h2,
+.control-cluster:not(.is-collapsed) > .collapsible-header h3,
+.section:not(.is-collapsed) > .collapsible-header h2:hover,
+.control-cluster:not(.is-collapsed) > .collapsible-header h3:hover {
+    color: #3b82f6;
+}
+
+/* Mouse camera interaction on the visualization surface. */
+#canvas { cursor: grab; }
+#canvas.is-camera-dragging { cursor: grabbing; }

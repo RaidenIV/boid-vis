@@ -28,6 +28,8 @@ const MORPH_TYPE_GROUPS = Object.freeze({
   attractors: ATTRACTOR_TYPES
 });
 const MORPH_SECONDS_PER_TYPE = 4;
+const ATTRACTOR_MORPH_SECONDS_PER_TYPE = 2.2;
+const ATTRACTOR_MORPH_HOLD_FRACTION = 0.18;
 
 /**
  * Which two simulation types Morph is currently blending, and how far between
@@ -37,15 +39,45 @@ const MORPH_SECONDS_PER_TYPE = 4;
  */
 export function getMorphBlend(morphScope, time, morphSpeed) {
   const morphTypes = MORPH_TYPE_GROUPS[morphScope] || ALL_MORPH_TYPES;
-  const rawPhase = (time * morphSpeed) / MORPH_SECONDS_PER_TYPE;
+  const secondsPerType =
+    morphScope === "attractors"
+      ? ATTRACTOR_MORPH_SECONDS_PER_TYPE
+      : MORPH_SECONDS_PER_TYPE;
+  const rawPhase = (time * morphSpeed) / secondsPerType;
   const wrappedPhase =
     ((rawPhase % morphTypes.length) + morphTypes.length) % morphTypes.length;
   const typeIndex = Math.floor(wrappedPhase);
   const linearMix = wrappedPhase - typeIndex;
+
+  let mix;
+  if (morphScope === "attractors") {
+    // Give each chaotic attractor a short fully-resolved presentation before
+    // and after the transition. The old full-duration smoothstep spent nearly
+    // the entire four-second phase in a hybrid vector field, so the individual
+    // Lorenz/Rossler/etc. structures never read as clearly as they should.
+    // Attractor-only Morph now cycles faster and confines the actual morph to
+    // the middle of the phase while still remaining continuous.
+    const hold = ATTRACTOR_MORPH_HOLD_FRACTION;
+    const transition = Math.max(1e-6, 1 - hold * 2);
+    const transitionPhase = Math.max(
+      0,
+      Math.min(1, (linearMix - hold) / transition)
+    );
+    // Smootherstep keeps zero slope at both ends, avoiding a visible snap when
+    // the phase enters or leaves its identity hold.
+    mix =
+      transitionPhase *
+      transitionPhase *
+      transitionPhase *
+      (transitionPhase * (transitionPhase * 6 - 15) + 10);
+  } else {
+    mix = linearMix * linearMix * (3 - 2 * linearMix);
+  }
+
   return {
     typeA: morphTypes[typeIndex],
     typeB: morphTypes[(typeIndex + 1) % morphTypes.length],
-    mix: linearMix * linearMix * (3 - 2 * linearMix)
+    mix
   };
 }
 const MORPH_ACCEL_A = new Float64Array(3);

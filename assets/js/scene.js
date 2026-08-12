@@ -33,7 +33,11 @@ camera.position.set(0, 0, 50);
 
 export const renderer = new THREE.WebGLRenderer({
   canvas,
-  antialias: true,
+  // Deliberately NOT antialias: true. Every frame is composited through
+  // EffectComposer, whose render targets carry no MSAA, and the pass that
+  // reaches the default framebuffer is a fullscreen quad with no internal
+  // edges. The flag allocated a multisampled backbuffer that antialiased
+  // nothing. Geometry antialiasing is done on the composer target instead.
   alpha: true,
   // Required so PNG export can read the framebuffer after a render.
   preserveDrawingBuffer: true
@@ -44,6 +48,34 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 /* ---------------------------------------------------------------------------
    Selective bloom (swarm layer)
 --------------------------------------------------------------------------- */
+/**
+ * Multisampled target for the pass that actually resolves to screen. WebGL2
+ * only; on WebGL1 this returns null and the composer falls back to its default
+ * single-sampled target, i.e. the previous behaviour.
+ *
+ * Only the final composer gets MSAA. The bloom chain is heavily blurred, so
+ * antialiasing its source buys nothing for the bandwidth.
+ */
+function createMultisampleTarget(width, height) {
+  if (!renderer.capabilities.isWebGL2) return null;
+  const target = new THREE.WebGLMultisampleRenderTarget(width, height, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat
+  });
+  target.samples = 4;
+  return target;
+}
+
+const initialTargetWidth = Math.max(
+  1,
+  Math.floor(window.innerWidth * Math.min(window.devicePixelRatio, 2))
+);
+const initialTargetHeight = Math.max(
+  1,
+  Math.floor(window.innerHeight * Math.min(window.devicePixelRatio, 2))
+);
+
 export const bloomComposer = new EffectComposer(renderer);
 bloomComposer.renderToScreen = false;
 bloomComposer.addPass(new RenderPass(scene, camera));
@@ -56,7 +88,17 @@ export const bloomPass = new UnrealBloomPass(
 );
 bloomComposer.addPass(bloomPass);
 
-export const finalComposer = new EffectComposer(renderer);
+const finalTarget = createMultisampleTarget(
+  initialTargetWidth,
+  initialTargetHeight
+);
+
+export const finalComposer = finalTarget
+  ? new EffectComposer(renderer, finalTarget)
+  : new EffectComposer(renderer);
+// Passing an explicit target makes EffectComposer set its internal pixel ratio
+// to 1, so setSize() must then be given device pixels rather than CSS pixels.
+export const finalComposerUsesDeviceSize = Boolean(finalTarget);
 finalComposer.addPass(new RenderPass(scene, camera));
 
 const finalPass = new ShaderPass(
@@ -194,8 +236,21 @@ export function resizeRenderer(width, height, pixelRatio) {
   camera.updateProjectionMatrix();
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
+  // EffectComposer caches the renderer's pixel ratio at construction and never
+  // re-reads it, so without this the bloom targets keep whatever ratio was
+  // current at page load. Changing the Performance preset's pixel-ratio limit
+  // then leaves bloom rendering at the wrong resolution — oversampled when the
+  // limit drops, and blurrier than intended when it rises.
+  bloomComposer.setPixelRatio(pixelRatio);
   bloomComposer.setSize(width, height);
-  finalComposer.setSize(width, height);
+  if (finalComposerUsesDeviceSize) {
+    finalComposer.setSize(
+      Math.max(1, Math.floor(width * pixelRatio)),
+      Math.max(1, Math.floor(height * pixelRatio))
+    );
+  } else {
+    finalComposer.setSize(width, height);
+  }
   bloomPass.resolution.set(width, height);
 }
 
@@ -206,4 +261,3 @@ export function renderScene() {
   camera.layers.set(0);
   finalComposer.render();
 }
-

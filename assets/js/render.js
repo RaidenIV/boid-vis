@@ -437,9 +437,43 @@ function writeDisplayPoint(output, x, y, z, quaternion) {
   output[2] = z + qw * tz + qx * ty - qy * tx;
 }
 
+/**
+ * Format-aware composition scale. The user-facing Visualization Size remains
+ * the artistic base value; this multiplier only compensates for the available
+ * horizontal/vertical field of view of each output format. Preview and export
+ * both use camera.aspect, so framing is identical in both paths.
+ */
+function getViewportVisualizationMultiplier() {
+  switch (state.viewportPreset) {
+    case "landscape":
+      return 1.0;
+    case "square":
+      return 0.86;
+    case "portrait":
+      return 0.62;
+    default: {
+      // Fill Window follows the actual current aspect rather than a fixed
+      // preset. Interpolate smoothly between the tested portrait/square/
+      // landscape compositions so resizing the browser does not jump in size.
+      const aspect = Math.max(0.4, Math.min(2.4, camera.aspect || 1));
+      if (aspect >= 1) {
+        const t = Math.max(0, Math.min(1, (aspect - 1) / ((16 / 9) - 1)));
+        return 0.86 + (1.0 - 0.86) * t;
+      }
+      const portraitAspect = 9 / 16;
+      const t = Math.max(0, Math.min(1, (aspect - portraitAspect) / (1 - portraitAspect)));
+      return 0.62 + (0.86 - 0.62) * t;
+    }
+  }
+}
+
+function getEffectiveVisualizationScale() {
+  return RENDER_SCALE * (state.visualizationSize / 100) * getViewportVisualizationMultiplier();
+}
+
 function updateParticleGeometry() {
   const activeCount = state.activeCount;
-  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
+  const visualizationScale = getEffectiveVisualizationScale();
   for (let index = 0; index < activeCount; index += 1) {
     const particle = particles[index];
     const offset = index * 3;
@@ -499,7 +533,7 @@ function updateTrailGeometry() {
   }
 
   const segments = length - 1;
-  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
+  const visualizationScale = getEffectiveVisualizationScale();
   const positions = trailBuffers.positions;
   const colors = trailBuffers.colors;
   const history = trails.history;
@@ -772,7 +806,7 @@ function updateCameraFraming() {
   if (aspect < 1) {
     const bound = isAttractorMode() ? 1.35 : 1.0;
     const subjectRadius =
-      RENDER_SCALE * (state.visualizationSize / 100) * state.sphereBoundary * bound;
+      getEffectiveVisualizationScale() * state.sphereBoundary * bound;
     const distance = Math.max(1, state.cameraDistance);
     const required =
       (2 * Math.atan(subjectRadius / aspect / distance) * 180) / Math.PI;

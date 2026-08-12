@@ -624,6 +624,14 @@ input[type="range"]::-moz-range-thumb:hover {
 .control > select,
 .control > .control-hint,
 .control > .audio-load-progress-wrap { grid-area: input; }
+
+/* FFT analysis progress belongs below the Audio Resolution select, not on top of it. */
+#fft-load-wrap {
+    grid-area: auto;
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-top: 2px;
+}
 .control > select,
 .control > .control-hint { width: 100%; }
 

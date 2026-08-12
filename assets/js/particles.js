@@ -28,6 +28,26 @@ const MORPH_TYPE_GROUPS = Object.freeze({
   attractors: ATTRACTOR_TYPES
 });
 const MORPH_SECONDS_PER_TYPE = 4;
+
+/**
+ * Which two simulation types Morph is currently blending, and how far between
+ * them. Exported so the renderer can interpolate display orientation across the
+ * same blend the simulation is running — duplicating the phase expression in
+ * two files would let them drift apart.
+ */
+export function getMorphBlend(morphScope, time, morphSpeed) {
+  const morphTypes = MORPH_TYPE_GROUPS[morphScope] || ALL_MORPH_TYPES;
+  const rawPhase = (time * morphSpeed) / MORPH_SECONDS_PER_TYPE;
+  const wrappedPhase =
+    ((rawPhase % morphTypes.length) + morphTypes.length) % morphTypes.length;
+  const typeIndex = Math.floor(wrappedPhase);
+  const linearMix = wrappedPhase - typeIndex;
+  return {
+    typeA: morphTypes[typeIndex],
+    typeB: morphTypes[(typeIndex + 1) % morphTypes.length],
+    mix: linearMix * linearMix * (3 - 2 * linearMix)
+  };
+}
 const MORPH_ACCEL_A = new Float64Array(3);
 const MORPH_ACCEL_B = new Float64Array(3);
 const LIQUID_ACCEL = new Float64Array(3);
@@ -859,20 +879,16 @@ export class Particle {
     let az = noiseZ;
 
     if (movement.type === "morph") {
-      const morphTypes = MORPH_TYPE_GROUPS[movement.morphScope] || ALL_MORPH_TYPES;
-      const rawPhase =
-        (time * movement.morphSpeed) / MORPH_SECONDS_PER_TYPE;
-      const wrappedPhase =
-        ((rawPhase % morphTypes.length) + morphTypes.length) %
-        morphTypes.length;
-      const typeIndex = Math.floor(wrappedPhase);
-      const nextTypeIndex = (typeIndex + 1) % morphTypes.length;
-      const linearMix = wrappedPhase - typeIndex;
-      const smoothMix = linearMix * linearMix * (3 - 2 * linearMix);
+      const blend = getMorphBlend(
+        movement.morphScope,
+        time,
+        movement.morphSpeed
+      );
+      const smoothMix = blend.mix;
 
       writeModeAcceleration(
         MORPH_ACCEL_A,
-        morphTypes[typeIndex],
+        blend.typeA,
         index,
         pool,
         activeCount,
@@ -892,7 +908,7 @@ export class Particle {
       );
       writeModeAcceleration(
         MORPH_ACCEL_B,
-        morphTypes[nextTypeIndex],
+        blend.typeB,
         index,
         pool,
         activeCount,

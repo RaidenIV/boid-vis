@@ -89,12 +89,13 @@ const finalPass = new ShaderPass(
 finalComposer.addPass(finalPass);
 
 /* ---------------------------------------------------------------------------
-   Lighting
+   No lighting
+
+   Nothing in this scene is lit. PointsMaterial and LineBasicMaterial are both
+   unlit, so the AmbientLight and PointLight that used to live here had no
+   effect on anything rendered — they only implied a lever that does not exist.
+   Colour comes entirely from the per-vertex colormap and the bloom chain.
 --------------------------------------------------------------------------- */
-scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-const pointLight = new THREE.PointLight(0xffffff, 1.0, 100);
-pointLight.position.set(0, 0, 20);
-scene.add(pointLight);
 
 /* ---------------------------------------------------------------------------
    Circular particle sprite

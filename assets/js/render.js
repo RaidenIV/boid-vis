@@ -45,6 +45,10 @@ const {
   BEAT_IMPULSE_DECAY
 } = engine;
 
+// Matches the PerspectiveCamera constructed in scene.js.
+const BASE_CAMERA_FOV = 75;
+const MAX_CAMERA_FOV = 110;
+
 let simulationAccumulator = 0;
 let flashPhase = 1;
 let smoothedAttractorEnergy = 0;
@@ -57,6 +61,9 @@ let previousActiveCount = 0;
 // 320 ms release deliberately suppresses per-hit chatter, which also makes
 // individual beats invisible; this restores them without destabilising shape.
 let beatImpulse = 0;
+// Vertical FOV actually pushed to the camera, tracked so updateProjectionMatrix
+// is only called when the framing genuinely changes.
+let appliedCameraFov = BASE_CAMERA_FOV;
 
 const ATTRACTOR_TYPES = new Set([
   "lorenz",
@@ -103,6 +110,9 @@ export function resetSimulation() {
   attractorSpeedReference = 1;
   previousActiveCount = 0;
   beatImpulse = 0;
+  appliedCameraFov = BASE_CAMERA_FOV;
+  camera.fov = BASE_CAMERA_FOV;
+  camera.updateProjectionMatrix();
   resetTrails();
 }
 
@@ -740,7 +750,45 @@ function stepSimulation(stepTime, context) {
  * previous fixed camera exactly; movement presets are deterministic so preview
  * and export use the same camera path.
  */
+/**
+ * Widen the vertical FOV in portrait formats so the visualization still fits.
+ *
+ * fitViewport() recomposes the canvas for four aspect ratios but the camera's
+ * vertical FOV was fixed at 75 degrees, so the horizontal extent shrank with the
+ * aspect: portrait 9:16 clipped the swarm by about 20 percent.
+ *
+ * Landscape and square are deliberately left alone. They already fit, and
+ * narrowing the FOV to tighten their generous margin would recompose every
+ * existing preset — a separate decision from fixing the clipping.
+ *
+ * Framing is derived from the nominal cameraDistance rather than the animated
+ * camera position, so presets that dolly (pushPull, drift) do not induce a
+ * breathing dolly-zoom.
+ */
+function updateCameraFraming() {
+  const aspect = camera.aspect || 1;
+  let fov = BASE_CAMERA_FOV;
+
+  if (aspect < 1) {
+    const bound = isAttractorMode() ? 1.35 : 1.0;
+    const subjectRadius =
+      RENDER_SCALE * (state.visualizationSize / 100) * state.sphereBoundary * bound;
+    const distance = Math.max(1, state.cameraDistance);
+    const required =
+      (2 * Math.atan(subjectRadius / aspect / distance) * 180) / Math.PI;
+    fov = Math.min(MAX_CAMERA_FOV, Math.max(BASE_CAMERA_FOV, required));
+  }
+
+  if (Math.abs(fov - appliedCameraFov) > 1e-4) {
+    appliedCameraFov = fov;
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+  }
+}
+
 function updateCamera(deltaTime, playing) {
+  updateCameraFraming();
+
   const distance = state.cameraDistance;
   const amount = state.cameraAmount / 100;
   const speed = state.cameraSpeed;

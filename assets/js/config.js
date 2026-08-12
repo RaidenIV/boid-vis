@@ -151,15 +151,14 @@ export const engine = Object.freeze({
   // once; the controls only change how much of it is walked each frame.
   TRAIL_MAX_LENGTH: 48,
   TRAIL_PARTICLE_CAP: 4000,
-  TRAIL_CURVE_SUBDIVISIONS: 2,
   // Silent sub-steps walked by a single leader particle when entering an
   // attractor mode, so the first visible frame is already a formed manifold
   // instead of a collapsing ball.
   ATTRACTOR_PREWARM_BURN_IN: 600,
-  // Maximum adaptive sub-steps used when Movement Speed/audio time-dilate a
-  // chaotic attractor. Keeping each increment near the baseline step prevents
-  // high-speed paths from becoming polygonal.
-  ATTRACTOR_MAX_SUBSTEPS: 64,
+  // Explicit Euler blurs the manifold once the per-sub-step distance grows.
+  // Above this, the attractor field is re-evaluated multiple times per step.
+  ATTRACTOR_MAX_POSITION_STEP: 0.0875,
+  ATTRACTOR_MAX_SUBSTEPS: 8,
   // Decay of the per-beat traversal impulse, in simulation seconds.
   BEAT_IMPULSE_DECAY: 0.18
 });

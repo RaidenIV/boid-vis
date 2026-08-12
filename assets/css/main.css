@@ -490,9 +490,7 @@ input[type="range"]::-moz-range-thumb:hover {
     max-height: calc(100vh - 40px);
     display: flex;
     flex-direction: column;
-    width: 20vw;
-    min-width: 0;
-    max-width: none;
+    max-width: 340px;
 }
 #controls.collapsed { max-height: none; }
 .controls-content {
@@ -514,12 +512,7 @@ input[type="range"]::-moz-range-thumb:hover {
 .controls-content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.30); }
 
 @media (max-width: 768px) {
-    #controls {
-        width: auto;
-        min-width: auto;
-        max-height: calc(100vh - 20px);
-        max-width: calc(100% - 20px);
-    }
+    #controls { max-height: calc(100vh - 20px); max-width: none; }
 }
 
 /* --- Collapsible sections and clusters ---------------------------------- */
@@ -897,26 +890,6 @@ button.secondary.is-active {
 }
 .video-export-progress-wrap[hidden],
 .audio-load-progress-wrap[hidden] { display: none; }
-
-/* Audio Resolution has a select and an analysis progress indicator. Give each
-   its own row so the progress bar never paints over the select control. */
-#sectionAudio .control:first-child {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-        "label"
-        "select"
-        "progress";
-}
-#sectionAudio .control:first-child > select { grid-area: select; }
-#sectionAudio .control:first-child > .audio-load-progress-wrap {
-    grid-area: progress;
-    width: 100%;
-    min-width: 0;
-    margin-top: 0;
-}
-#sectionAudio .control:first-child > .audio-load-progress-wrap progress {
-    min-width: 0;
-}
 
 progress {
     flex: 1 1 auto;

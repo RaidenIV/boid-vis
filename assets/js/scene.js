@@ -15,8 +15,7 @@ const {
   BLOOM_LAYER,
   PARTICLE_POOL,
   TRAIL_MAX_LENGTH,
-  TRAIL_PARTICLE_CAP,
-  TRAIL_CURVE_SUBDIVISIONS
+  TRAIL_PARTICLE_CAP
 } = engine;
 
 export const canvas = elements.canvas;
@@ -195,11 +194,7 @@ scene.add(particleSystem);
    case — the trail controls only change how much of them is walked per frame,
    and setDrawRange keeps the rest out of the draw call.
 --------------------------------------------------------------------------- */
-const TRAIL_VERTEX_CAPACITY =
-  TRAIL_PARTICLE_CAP *
-  (TRAIL_MAX_LENGTH - 1) *
-  TRAIL_CURVE_SUBDIVISIONS *
-  2;
+const TRAIL_VERTEX_CAPACITY = TRAIL_PARTICLE_CAP * (TRAIL_MAX_LENGTH - 1) * 2;
 
 export const trailBuffers = {
   positions: new Float32Array(TRAIL_VERTEX_CAPACITY * 3),

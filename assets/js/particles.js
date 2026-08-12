@@ -13,6 +13,7 @@ const {
   PARTICLE_POOL,
   TRAIL_MAX_LENGTH,
   TRAIL_PARTICLE_CAP,
+  ATTRACTOR_MAX_POSITION_STEP,
   ATTRACTOR_MAX_SUBSTEPS
 } = engine;
 const FLOCK_NEIGHBOR_OFFSETS = Object.freeze([1, 7, 31, 127]);
@@ -1175,23 +1176,35 @@ export class Particle {
       amount *
       (usesDirectAttractorTraversal ? 1 : speed);
 
-    // Time-dilate chaotic attractors by advancing them through multiple small,
-    // stable simulation increments. Multiplying one large position step by
-    // Movement Speed made the sampled curve increasingly polygonal/jagged at
-    // higher speeds. Here speed and audio instead increase simulated time while
-    // each integration increment stays at (or below) the baseline step.
-    const attractorTimeScale = Math.max(0, speed * attractorTraversal);
-    const usesDirectAttractor = ATTRACTOR_TYPE_SET.has(movement.type);
+    // Chaotic-attractor traversal rate = attractor field baseline × manual
+    // Movement Speed × audio traversal multiplier. The field baseline is
+    // already encoded in writeAttractorAcceleration(); this is the only place
+    // Movement Speed changes how quickly attractor particles advance.
+    const positionStep = DT * speed * attractorTraversal;
 
-    if (usesDirectAttractor) {
+    // Loud passages advance the position so far per step that the steered
+    // velocity lags the field, and the manifold visibly swells — measured at
+    // 1.7x mean radius from quiet to loud on the unmodified build. This is not
+    // Euler truncation error; it is the steering model, so the fix is to hold
+    // velocity relaxations per unit of path advanced constant rather than to
+    // subdivide for accuracy.
+    const needsSubStepping =
+      ATTRACTOR_TYPE_SET.has(movement.type) &&
+      positionStep > ATTRACTOR_MAX_POSITION_STEP;
+
+    if (needsSubStepping) {
       const subSteps = Math.min(
         ATTRACTOR_MAX_SUBSTEPS,
-        Math.max(1, Math.ceil(attractorTimeScale))
+        Math.ceil(positionStep / ATTRACTOR_MAX_POSITION_STEP)
       );
-      const subTimeScale = attractorTimeScale / subSteps;
-      const subGain = DT * amount * subTimeScale;
-      const subPositionStep = DT * subTimeScale;
-      const subDamping = Math.pow(damping, subTimeScale);
+      // Full gain and full damping per sub-step — deliberately NOT divided.
+      // The quantity that shapes the manifold is velocity relaxations per unit
+      // of path advanced. Dividing them would preserve the ratio that causes
+      // the deformation; keeping them at full strength restores one relaxation
+      // per nominal step of travel, which is what holds the geometry fixed.
+      const subGain = gain;
+      const subPositionStep = positionStep / subSteps;
+      const subDamping = damping;
 
       for (let subStep = 0; subStep < subSteps; subStep += 1) {
         writeAttractorAcceleration(
@@ -1224,10 +1237,6 @@ export class Particle {
         this.positionZ += this.velocityZ * subPositionStep;
       }
     } else {
-      // Non-attractor modes retain their original integration. Attractor-only
-      // Morph still uses the established blended-field path so this fix does
-      // not change Morph behavior outside the reported direct attractor issue.
-      const positionStep = DT * speed * attractorTraversal;
       this.velocityX = this.velocityX * damping + ax * gain;
       this.velocityY = this.velocityY * damping + ay * gain;
       this.velocityZ = this.velocityZ * damping + az * gain;

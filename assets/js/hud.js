@@ -85,12 +85,8 @@ export function drawHud(context, width, height) {
   // preview, PNG and video precisely so they match.
   const scale = userScale * (Math.min(width, height) / HUD_REFERENCE_HEIGHT);
   const opacity = Math.max(0, Math.min(1, Number(state.hudOpacity) || 0));
-  const frameInset = Math.max(12, 16 * scale);
+  const inset = Math.max(16, 27 * scale);
   const tick = 18 * scale;
-  // Keep all HUD content beyond the corner-tick footprint. Previously the
-  // labels started on the same inset used by the frame, so the top title/FPS
-  // and bottom meters could sit directly on the corner lines.
-  const contentInset = frameInset + tick + 8 * scale;
   const fontSize = Math.max(9, 12.96 * scale);
   const lineHeight = fontSize * 1.32;
 
@@ -99,7 +95,7 @@ export function drawHud(context, width, height) {
   context.strokeStyle = "rgba(255,255,255,0.46)";
   context.lineWidth = Math.max(1, scale);
 
-  drawCornerTicks(context, width, height, frameInset, tick);
+  drawCornerTicks(context, width, height, inset, tick);
 
   context.font = `600 ${fontSize}px ${HUD_FONT}`;
   context.textBaseline = "top";
@@ -120,7 +116,7 @@ export function drawHud(context, width, height) {
 
   leftLines.forEach((line, index) => {
     context.globalAlpha = opacity * (index === 0 ? 1 : 0.76);
-    context.fillText(line, contentInset, contentInset + index * lineHeight);
+    context.fillText(line, inset, inset + index * lineHeight);
   });
 
   context.globalAlpha = opacity;
@@ -133,7 +129,7 @@ export function drawHud(context, width, height) {
   ];
   rightLines.forEach((line, index) => {
     context.fillStyle = index === 0 ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.66)";
-    context.fillText(line, width - contentInset, contentInset + index * lineHeight);
+    context.fillText(line, width - inset, inset + index * lineHeight);
   });
   context.textAlign = "left";
 
@@ -141,11 +137,8 @@ export function drawHud(context, width, height) {
   const meterHeight = 7 * 11 * scale;
   drawMeters(
     context,
-    contentInset,
-    Math.max(
-      contentInset + leftLines.length * lineHeight + 8 * scale,
-      height - contentInset - meterHeight
-    ),
+    inset,
+    Math.max(inset + leftLines.length * lineHeight + 8 * scale, height - inset - meterHeight),
     meterWidth,
     scale
   );

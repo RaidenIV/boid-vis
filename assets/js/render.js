@@ -41,7 +41,6 @@ const {
   FLASH_DURATION,
   RENDER_SCALE,
   PARTICLE_POOL,
-  TRAIL_CURVE_SUBDIVISIONS,
   ATTRACTOR_PREWARM_BURN_IN,
   BEAT_IMPULSE_DECAY
 } = engine;
@@ -49,37 +48,6 @@ const {
 // Matches the PerspectiveCamera constructed in scene.js.
 const BASE_CAMERA_FOV = 75;
 const MAX_CAMERA_FOV = 110;
-
-// Artistic size remains user-controlled by Visualization Size; this multiplier
-// only compensates for the available frame shape so the same setting composes
-// cleanly in landscape, square and portrait output.
-const VIEWPORT_VISUALIZATION_SCALE = Object.freeze({
-  fill: 1.0,
-  landscape: 1.0,
-  square: 0.9,
-  portrait: 0.7
-});
-
-function getViewportVisualizationScale() {
-  if (state.viewportPreset !== "fill") {
-    return VIEWPORT_VISUALIZATION_SCALE[state.viewportPreset] || 1;
-  }
-  // Fill Window may itself be portrait. Interpolate down only on narrow
-  // displays so normal desktop fill composition remains unchanged.
-  const aspect = camera.aspect || 1;
-  if (aspect >= 1) return 1;
-  const portraitAspect = 9 / 16;
-  const t = clamp((aspect - portraitAspect) / (1 - portraitAspect), 0, 1);
-  return 0.7 + t * 0.3;
-}
-
-function getVisualizationScale() {
-  return (
-    RENDER_SCALE *
-    (state.visualizationSize / 100) *
-    getViewportVisualizationScale()
-  );
-}
 
 let simulationAccumulator = 0;
 let flashPhase = 1;
@@ -445,19 +413,6 @@ function buildColorLut(stopsA, stopsB, mix, brightness) {
 }
 
 const DISPLAY_POINT = new Float64Array(3);
-const TRAIL_CURVE_POINTS = new Float64Array(engine.TRAIL_MAX_LENGTH * 3);
-
-function catmullRom(p0, p1, p2, p3, t) {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return (
-    0.5 *
-    (2 * p1 +
-      (-p0 + p2) * t +
-      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-      (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
-  );
-}
 
 /**
  * Rotate a simulation-space point into display space. Trails multiply the
@@ -484,7 +439,7 @@ function writeDisplayPoint(output, x, y, z, quaternion) {
 
 function updateParticleGeometry() {
   const activeCount = state.activeCount;
-  const visualizationScale = getVisualizationScale();
+  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
   for (let index = 0; index < activeCount; index += 1) {
     const particle = particles[index];
     const offset = index * 3;
@@ -544,8 +499,7 @@ function updateTrailGeometry() {
   }
 
   const segments = length - 1;
-  const subdivisions = Math.max(1, TRAIL_CURVE_SUBDIVISIONS);
-  const visualizationScale = getVisualizationScale();
+  const visualizationScale = RENDER_SCALE * (state.visualizationSize / 100);
   const positions = trailBuffers.positions;
   const colors = trailBuffers.colors;
   const history = trails.history;
@@ -556,11 +510,10 @@ function updateTrailGeometry() {
   for (let index = 0; index < tracked; index += 1) {
     const particle = particles[index];
     const base = index * stride * 3;
+    let previousX = 0;
+    let previousY = 0;
+    let previousZ = 0;
 
-    // Transform each raw history sample once. Higher Movement Speed means more
-    // attractor-time passes between visible frames; rendering a Catmull-Rom
-    // curve through those stable samples prevents the trail from turning into
-    // a coarse polygon without changing the mathematical trajectory itself.
     for (let step = 0; step < length; step += 1) {
       const slot = (newest - step + stride * 2) % stride;
       const offset = base + slot * 3;
@@ -571,87 +524,40 @@ function updateTrailGeometry() {
         history[offset + 2],
         DISPLAY_QUATERNION
       );
-      const curveOffset = step * 3;
-      TRAIL_CURVE_POINTS[curveOffset] = DISPLAY_POINT[0] * visualizationScale;
-      TRAIL_CURVE_POINTS[curveOffset + 1] = DISPLAY_POINT[1] * visualizationScale;
-      TRAIL_CURVE_POINTS[curveOffset + 2] = DISPLAY_POINT[2] * visualizationScale;
-    }
+      const pointX = DISPLAY_POINT[0] * visualizationScale;
+      const pointY = DISPLAY_POINT[1] * visualizationScale;
+      const pointZ = DISPLAY_POINT[2] * visualizationScale;
 
-    for (let step = 0; step < segments; step += 1) {
-      const p0 = Math.max(0, step - 1) * 3;
-      const p1 = step * 3;
-      const p2 = (step + 1) * 3;
-      const p3 = Math.min(length - 1, step + 2) * 3;
-
-      for (let sub = 0; sub < subdivisions; sub += 1) {
-        const t0 = sub / subdivisions;
-        const t1 = (sub + 1) / subdivisions;
-        const age0 = (step + t0) / segments;
-        const age1 = (step + t1) / segments;
-        const weight0 = (1 - age0) * (1 - age0);
-        const weight1 = (1 - age1) * (1 - age1);
-
-        const x0 = catmullRom(
-          TRAIL_CURVE_POINTS[p0],
-          TRAIL_CURVE_POINTS[p1],
-          TRAIL_CURVE_POINTS[p2],
-          TRAIL_CURVE_POINTS[p3],
-          t0
-        );
-        const y0 = catmullRom(
-          TRAIL_CURVE_POINTS[p0 + 1],
-          TRAIL_CURVE_POINTS[p1 + 1],
-          TRAIL_CURVE_POINTS[p2 + 1],
-          TRAIL_CURVE_POINTS[p3 + 1],
-          t0
-        );
-        const z0 = catmullRom(
-          TRAIL_CURVE_POINTS[p0 + 2],
-          TRAIL_CURVE_POINTS[p1 + 2],
-          TRAIL_CURVE_POINTS[p2 + 2],
-          TRAIL_CURVE_POINTS[p3 + 2],
-          t0
-        );
-        const x1 = catmullRom(
-          TRAIL_CURVE_POINTS[p0],
-          TRAIL_CURVE_POINTS[p1],
-          TRAIL_CURVE_POINTS[p2],
-          TRAIL_CURVE_POINTS[p3],
-          t1
-        );
-        const y1 = catmullRom(
-          TRAIL_CURVE_POINTS[p0 + 1],
-          TRAIL_CURVE_POINTS[p1 + 1],
-          TRAIL_CURVE_POINTS[p2 + 1],
-          TRAIL_CURVE_POINTS[p3 + 1],
-          t1
-        );
-        const z1 = catmullRom(
-          TRAIL_CURVE_POINTS[p0 + 2],
-          TRAIL_CURVE_POINTS[p1 + 2],
-          TRAIL_CURVE_POINTS[p2 + 2],
-          TRAIL_CURVE_POINTS[p3 + 2],
-          t1
-        );
+      if (step > 0) {
+        // Squared falloff keeps the head bright and lets the tail die quickly,
+        // which stops dense regions from smearing into a solid block.
+        const nearFade = 1 - (step - 1) / segments;
+        const farFade = 1 - step / segments;
+        const nearWeight = nearFade * nearFade;
+        const farWeight = farFade * farFade;
 
         let writeOffset = vertex * 3;
-        positions[writeOffset] = x0;
-        positions[writeOffset + 1] = y0;
-        positions[writeOffset + 2] = z0;
-        colors[writeOffset] = particle.colorR * weight0;
-        colors[writeOffset + 1] = particle.colorG * weight0;
-        colors[writeOffset + 2] = particle.colorB * weight0;
+        positions[writeOffset] = previousX;
+        positions[writeOffset + 1] = previousY;
+        positions[writeOffset + 2] = previousZ;
+        colors[writeOffset] = particle.colorR * nearWeight;
+        colors[writeOffset + 1] = particle.colorG * nearWeight;
+        colors[writeOffset + 2] = particle.colorB * nearWeight;
         vertex += 1;
 
         writeOffset = vertex * 3;
-        positions[writeOffset] = x1;
-        positions[writeOffset + 1] = y1;
-        positions[writeOffset + 2] = z1;
-        colors[writeOffset] = particle.colorR * weight1;
-        colors[writeOffset + 1] = particle.colorG * weight1;
-        colors[writeOffset + 2] = particle.colorB * weight1;
+        positions[writeOffset] = pointX;
+        positions[writeOffset + 1] = pointY;
+        positions[writeOffset + 2] = pointZ;
+        colors[writeOffset] = particle.colorR * farWeight;
+        colors[writeOffset + 1] = particle.colorG * farWeight;
+        colors[writeOffset + 2] = particle.colorB * farWeight;
         vertex += 1;
       }
+
+      previousX = pointX;
+      previousY = pointY;
+      previousZ = pointZ;
     }
   }
 
@@ -866,7 +772,7 @@ function updateCameraFraming() {
   if (aspect < 1) {
     const bound = isAttractorMode() ? 1.35 : 1.0;
     const subjectRadius =
-      getVisualizationScale() * state.sphereBoundary * bound;
+      RENDER_SCALE * (state.visualizationSize / 100) * state.sphereBoundary * bound;
     const distance = Math.max(1, state.cameraDistance);
     const required =
       (2 * Math.atan(subjectRadius / aspect / distance) * 180) / Math.PI;

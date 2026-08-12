@@ -4,6 +4,9 @@ import { audio, elements, state } from "./core.js";
 import { formatTime } from "./utils.js";
 
 const HUD_FONT = "Rajdhani, sans-serif";
+// Sizing reference. At a 1080-pixel short side and hudScale 1, every derived
+// value below reproduces the previous absolute-pixel layout exactly.
+const HUD_REFERENCE_HEIGHT = 1080;
 
 function titleCase(value) {
   return String(value || "")
@@ -73,17 +76,25 @@ function drawMeters(context, x, y, width, scale) {
 export function drawHud(context, width, height) {
   if (!state.hudEnabled || !context || width <= 0 || height <= 0) return;
 
-  const scale = Math.max(0.5, Math.min(2, Number(state.hudScale) || 1));
+  const userScale = Math.max(0.5, Math.min(2, Number(state.hudScale) || 1));
+  // Everything below is expressed in units of `scale`, which folds in the
+  // output resolution. Previously `inset` and `fontSize` scaled with the frame
+  // while `tick`, `lineWidth` and every constant in drawMeters() were absolute
+  // pixels, so a 4K export drew the same HUD chrome as a 1080p preview at a
+  // third the relative size, with hairline strokes. This function is shared by
+  // preview, PNG and video precisely so they match.
+  const scale = userScale * (Math.min(width, height) / HUD_REFERENCE_HEIGHT);
   const opacity = Math.max(0, Math.min(1, Number(state.hudOpacity) || 0));
-  const inset = Math.max(16, Math.min(width, height) * 0.025);
+  const inset = Math.max(16, 27 * scale);
   const tick = 18 * scale;
-  const fontSize = Math.max(9, Math.min(width, height) * 0.012 * scale);
+  const fontSize = Math.max(9, 12.96 * scale);
   const lineHeight = fontSize * 1.32;
 
   context.save();
   context.globalAlpha *= opacity;
   context.strokeStyle = "rgba(255,255,255,0.46)";
   context.lineWidth = Math.max(1, scale);
+
   drawCornerTicks(context, width, height, inset, tick);
 
   context.font = `600 ${fontSize}px ${HUD_FONT}`;

@@ -368,7 +368,13 @@
                                 <option value="all" selected>All Simulation Types</option>
                                 <option value="boids">Boid Simulations Only</option>
                                 <option value="attractors">Chaotic Attractors Only</option>
+                                <option value="custom">Custom Selection…</option>
                             </select>
+                        </div>
+                        <div class="control custom-morph-selection-control" id="custom-morph-selection-control" hidden>
+                            <label for="edit-custom-morph">Custom Types</label>
+                            <button class="secondary custom-morph-edit" id="edit-custom-morph" type="button">Choose Simulation Types</button>
+                            <div class="control-hint custom-morph-summary" id="custom-morph-summary">All simulation types selected</div>
                         </div>
                         <div class="control">
                             <label for="attractor-color-source">Color Source</label>
@@ -773,6 +779,38 @@
                 <div><span>ETA</span><strong id="export-overlay-eta">—</strong></div>
             </div>
             <button class="secondary" id="export-cancel" type="button">Cancel Export</button>
+        </div>
+    </div>
+
+    <div id="custom-morph-modal" class="custom-morph-modal" hidden aria-hidden="true">
+        <div class="custom-morph-dialog" role="dialog" aria-modal="true" aria-labelledby="custom-morph-title">
+            <div class="custom-morph-header">
+                <div>
+                    <div class="custom-morph-kicker">MORPH BETWEEN</div>
+                    <h2 id="custom-morph-title">Custom Simulation Types</h2>
+                </div>
+                <button class="custom-morph-close" id="custom-morph-close" type="button" aria-label="Close custom morph selection">×</button>
+            </div>
+            <p class="custom-morph-copy">Select at least two simulation types. Morph will cycle only through the checked types in the order shown.</p>
+            <div class="custom-morph-options" id="custom-morph-options">
+                <label><input type="checkbox" value="flow"> <span>Flow — Original</span></label>
+                <label><input type="checkbox" value="flock"> <span>Flock</span></label>
+                <label><input type="checkbox" value="swarm"> <span>Swarm</span></label>
+                <label><input type="checkbox" value="vortex"> <span>Vortex</span></label>
+                <label><input type="checkbox" value="orbit"> <span>Orbit</span></label>
+                <label><input type="checkbox" value="liquid"> <span>Liquid</span></label>
+                <label><input type="checkbox" value="lorenz"> <span>Attractor — Lorenz</span></label>
+                <label><input type="checkbox" value="rossler"> <span>Attractor — Rössler</span></label>
+                <label><input type="checkbox" value="halvorsen"> <span>Attractor — Halvorsen</span></label>
+                <label><input type="checkbox" value="aizawa"> <span>Attractor — Aizawa</span></label>
+                <label><input type="checkbox" value="thomas"> <span>Attractor — Thomas</span></label>
+                <label><input type="checkbox" value="dadras"> <span>Attractor — Dadras</span></label>
+            </div>
+            <div class="custom-morph-validation" id="custom-morph-validation" aria-live="polite">Select at least two simulation types.</div>
+            <div class="custom-morph-actions">
+                <button class="secondary" id="custom-morph-cancel" type="button">Cancel</button>
+                <button class="play" id="custom-morph-apply" type="button">Apply Selection</button>
+            </div>
         </div>
     </div>
 

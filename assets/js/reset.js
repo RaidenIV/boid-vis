@@ -32,6 +32,7 @@ const sectionKeys = {
   boids: [
     "boidType",
     "morphScope",
+    "morphCustomTypes",
     "morphSpeed",
     "movementSpeed",
     "movementAmount",
@@ -54,6 +55,7 @@ const sectionKeys = {
     "reactivity",
     "boidType",
     "morphScope",
+    "morphCustomTypes",
     "morphSpeed",
     "movementSpeed",
     "movementAmount",

@@ -23,7 +23,7 @@ const ENUMS = {
   ]),
   qualityPreset: new Set(["custom", "performance", "balanced", "high", "maximum", "auto"]),
   boidType: new Set(["flow", "flock", "swarm", "vortex", "orbit", "liquid", "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras", "morph"]),
-  morphScope: new Set(["all", "boids", "attractors"]),
+  morphScope: new Set(["all", "boids", "attractors", "custom"]),
   attractorColorSource: new Set(["speed", "radius", "lobe"]),
   videoResolution: new Set(["1080", "2k", "4k"]),
   videoFileType: new Set(["mp4", "mkv"])
@@ -66,6 +66,21 @@ function normalizeSettings(rawSettings) {
   PERSISTED_SETTING_KEYS.forEach((key) => {
     if (!(key in rawSettings)) return;
     const raw = rawSettings[key];
+
+    if (key === "morphCustomTypes") {
+      if (!Array.isArray(raw)) return;
+      const allowed = new Set([
+        "flow", "flock", "swarm", "vortex", "orbit", "liquid",
+        "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras"
+      ]);
+      const unique = [];
+      raw.forEach((item) => {
+        const value = String(item);
+        if (allowed.has(value) && !unique.includes(value)) unique.push(value);
+      });
+      if (unique.length >= 2) normalized[key] = unique;
+      return;
+    }
 
     if (ENUMS[key]) {
       const value = String(raw);

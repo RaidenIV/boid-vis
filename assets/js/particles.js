@@ -27,6 +27,22 @@ const MORPH_TYPE_GROUPS = Object.freeze({
   boids: BOID_SIMULATION_TYPES,
   attractors: ATTRACTOR_TYPES
 });
+const ALL_MORPH_TYPE_SET = new Set(ALL_MORPH_TYPES);
+
+function resolveMorphTypes(morphScope, customTypes = null) {
+  if (morphScope !== "custom") return MORPH_TYPE_GROUPS[morphScope] || ALL_MORPH_TYPES;
+  if (!Array.isArray(customTypes)) return ALL_MORPH_TYPES;
+  const resolved = [];
+  customTypes.forEach((type) => {
+    if (ALL_MORPH_TYPE_SET.has(type) && !resolved.includes(type)) resolved.push(type);
+  });
+  return resolved.length >= 2 ? resolved : ALL_MORPH_TYPES;
+}
+
+export function isAttractorOnlyMorph(morphScope, customTypes = null) {
+  const morphTypes = resolveMorphTypes(morphScope, customTypes);
+  return morphTypes.length >= 2 && morphTypes.every((type) => ATTRACTOR_TYPE_SET.has(type));
+}
 const MORPH_SECONDS_PER_TYPE = 4;
 const ATTRACTOR_MORPH_SECONDS_PER_TYPE = 2.2;
 const ATTRACTOR_MORPH_HOLD_FRACTION = 0.18;
@@ -37,12 +53,12 @@ const ATTRACTOR_MORPH_HOLD_FRACTION = 0.18;
  * same blend the simulation is running — duplicating the phase expression in
  * two files would let them drift apart.
  */
-export function getMorphBlend(morphScope, time, morphSpeed) {
-  const morphTypes = MORPH_TYPE_GROUPS[morphScope] || ALL_MORPH_TYPES;
-  const secondsPerType =
-    morphScope === "attractors"
-      ? ATTRACTOR_MORPH_SECONDS_PER_TYPE
-      : MORPH_SECONDS_PER_TYPE;
+export function getMorphBlend(morphScope, time, morphSpeed, customTypes = null) {
+  const morphTypes = resolveMorphTypes(morphScope, customTypes);
+  const attractorOnly = isAttractorOnlyMorph(morphScope, customTypes);
+  const secondsPerType = attractorOnly
+    ? ATTRACTOR_MORPH_SECONDS_PER_TYPE
+    : MORPH_SECONDS_PER_TYPE;
   const rawPhase = (time * morphSpeed) / secondsPerType;
   const wrappedPhase =
     ((rawPhase % morphTypes.length) + morphTypes.length) % morphTypes.length;
@@ -50,7 +66,7 @@ export function getMorphBlend(morphScope, time, morphSpeed) {
   const linearMix = wrappedPhase - typeIndex;
 
   let mix;
-  if (morphScope === "attractors") {
+  if (attractorOnly) {
     // Give each chaotic attractor a short fully-resolved presentation before
     // and after the transition. The old full-duration smoothstep spent nearly
     // the entire four-second phase in a hybrid vector field, so the individual
@@ -914,7 +930,8 @@ export class Particle {
       const blend = getMorphBlend(
         movement.morphScope,
         time,
-        movement.morphSpeed
+        movement.morphSpeed,
+        movement.morphCustomTypes
       );
       const smoothMix = blend.mix;
 
@@ -1171,7 +1188,8 @@ export class Particle {
     // not multiply them again by the bass-only amplitude term.
     const usesDirectAttractorTraversal =
       ATTRACTOR_TYPE_SET.has(movement.type) ||
-      (movement.type === "morph" && movement.morphScope === "attractors");
+      (movement.type === "morph" &&
+        isAttractorOnlyMorph(movement.morphScope, movement.morphCustomTypes));
     const attractorEnergy = Math.max(
       0,
       Math.min(1, movement.audioMagnitude ?? amplitude)
@@ -1280,7 +1298,8 @@ export class Particle {
 
     const usesAttractorBounds =
       ATTRACTOR_TYPE_SET.has(movement.type) ||
-      (movement.type === "morph" && movement.morphScope === "attractors");
+      (movement.type === "morph" &&
+        isAttractorOnlyMorph(movement.morphScope, movement.morphCustomTypes));
 
     if (usesAttractorBounds) {
       // Chaotic attractors are defined in Cartesian state spaces. A spherical

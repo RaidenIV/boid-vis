@@ -181,14 +181,94 @@ function bindControls() {
   const attractorSimulationTypes = new Set([
     "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras"
   ]);
+  const simulationLabels = new Map([
+    ["flow", "Flow"], ["flock", "Flock"], ["swarm", "Swarm"],
+    ["vortex", "Vortex"], ["orbit", "Orbit"], ["liquid", "Liquid"],
+    ["lorenz", "Lorenz"], ["rossler", "Rössler"], ["halvorsen", "Halvorsen"],
+    ["aizawa", "Aizawa"], ["thomas", "Thomas"], ["dadras", "Dadras"]
+  ]);
+  const isCustomAttractorOnly = () =>
+    state.morphScope === "custom" &&
+    Array.isArray(state.morphCustomTypes) &&
+    state.morphCustomTypes.length >= 2 &&
+    state.morphCustomTypes.every((type) => attractorSimulationTypes.has(type));
   const isAttractorSelection = () =>
     attractorSimulationTypes.has(state.boidType) ||
-    (state.boidType === "morph" && state.morphScope === "attractors");
+    (state.boidType === "morph" &&
+      (state.morphScope === "attractors" || isCustomAttractorOnly()));
+
+  const customMorphCheckboxes = () =>
+    [...elements.customMorphOptions.querySelectorAll('input[type="checkbox"]')];
+  const updateCustomMorphSummary = () => {
+    const selected = Array.isArray(state.morphCustomTypes) ? state.morphCustomTypes : [];
+    if (!elements.customMorphSummary) return;
+    if (selected.length === simulationLabels.size) {
+      elements.customMorphSummary.textContent = "All simulation types selected";
+      return;
+    }
+    const names = selected.map((type) => simulationLabels.get(type)).filter(Boolean);
+    elements.customMorphSummary.textContent = `${names.length} selected · ${names.join(", ")}`;
+  };
+  const updateCustomMorphValidation = () => {
+    const selectedCount = customMorphCheckboxes().filter((box) => box.checked).length;
+    const valid = selectedCount >= 2;
+    elements.customMorphApply.disabled = !valid;
+    elements.customMorphValidation.textContent = valid
+      ? `${selectedCount} simulation types selected.`
+      : "Select at least two simulation types.";
+    elements.customMorphValidation.dataset.state = valid ? "ready" : "error";
+  };
+  const syncCustomMorphModal = () => {
+    const selected = new Set(state.morphCustomTypes || []);
+    customMorphCheckboxes().forEach((box) => { box.checked = selected.has(box.value); });
+    updateCustomMorphValidation();
+    updateCustomMorphSummary();
+  };
+  const openCustomMorphModal = () => {
+    syncCustomMorphModal();
+    elements.customMorphModal.hidden = false;
+    elements.customMorphModal.setAttribute("aria-hidden", "false");
+    elements.customMorphOptions.querySelector('input[type="checkbox"]')?.focus();
+  };
+  const closeCustomMorphModal = () => {
+    elements.customMorphModal.hidden = true;
+    elements.customMorphModal.setAttribute("aria-hidden", "true");
+  };
   const updateMorphControlsVisibility = () => {
     const isMorph = state.boidType === "morph";
     elements.morphScopeControl.hidden = !isMorph;
     elements.morphSpeedControl.hidden = !isMorph;
+    elements.customMorphSelectionControl.hidden = !(isMorph && state.morphScope === "custom");
+    updateCustomMorphSummary();
   };
+
+  customMorphCheckboxes().forEach((box) => {
+    box.addEventListener("change", updateCustomMorphValidation);
+  });
+  elements.editCustomMorph.addEventListener("click", openCustomMorphModal);
+  elements.customMorphCancel.addEventListener("click", closeCustomMorphModal);
+  elements.customMorphClose.addEventListener("click", closeCustomMorphModal);
+  elements.customMorphModal.addEventListener("mousedown", (event) => {
+    if (event.target === elements.customMorphModal) closeCustomMorphModal();
+  });
+  elements.customMorphApply.addEventListener("click", () => {
+    const selected = customMorphCheckboxes()
+      .filter((box) => box.checked)
+      .map((box) => box.value);
+    if (selected.length < 2) return;
+    beginHistory("Change custom morph simulations");
+    state.morphCustomTypes = selected;
+    updateCustomMorphSummary();
+    closeCustomMorphModal();
+    if (isAttractorSelection()) reseedForCurrentMode();
+    commitHistory("Change custom morph simulations");
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.customMorphModal.hidden) {
+      closeCustomMorphModal();
+    }
+  });
+
   bindSelect(elements.boidType, "boidType", () => {
     updateMorphControlsVisibility();
     // Only attractors re-seed on a type change. Boid modes deliberately keep
@@ -196,7 +276,15 @@ function bindControls() {
     if (isAttractorSelection()) reseedForCurrentMode();
   });
   bindSelect(elements.morphScope, "morphScope", () => {
+    updateMorphControlsVisibility();
     if (isAttractorSelection()) reseedForCurrentMode();
+  });
+  elements.morphScope.addEventListener("change", () => {
+    if (state.morphScope === "custom") openCustomMorphModal();
+  });
+  window.addEventListener("visualizer-settings-applied", () => {
+    updateMorphControlsVisibility();
+    syncCustomMorphModal();
   });
   bindRange(elements.morphSpeed, elements.morphSpeedValue, "morphSpeed");
   updateMorphControlsVisibility();

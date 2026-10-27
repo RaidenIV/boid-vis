@@ -12,6 +12,7 @@ import { state } from "./core.js";
 import {
   copyParticleWithJitter,
   getMorphBlend,
+  isAttractorOnlyMorph,
   particles,
   reseedParticles,
   resetTrails,
@@ -263,7 +264,12 @@ function updateDisplayQuaternion() {
     return;
   }
 
-  const blend = getMorphBlend(state.morphScope, state.time, state.morphSpeed);
+  const blend = getMorphBlend(
+    state.morphScope,
+    state.time,
+    state.morphSpeed,
+    state.morphCustomTypes
+  );
   // Boid members of the rotation contribute identity, so morphing from a boid
   // simulation into an attractor rotates the presentation in smoothly.
   copyQuaternion(
@@ -281,7 +287,8 @@ function updateDisplayQuaternion() {
 function isAttractorMode() {
   return (
     ATTRACTOR_TYPES.has(state.boidType) ||
-    (state.boidType === "morph" && state.morphScope === "attractors")
+    (state.boidType === "morph" &&
+      isAttractorOnlyMorph(state.morphScope, state.morphCustomTypes))
   );
 }
 
@@ -290,6 +297,7 @@ function buildMovement(audioMagnitude) {
   return {
     type: state.boidType,
     morphScope: state.morphScope,
+    morphCustomTypes: state.morphCustomTypes,
     morphSpeed: state.morphSpeed,
     speed: state.movementSpeed,
     amount: state.movementAmount / 100,
@@ -375,7 +383,12 @@ export function reseedForCurrentMode() {
   }
 
   const type =
-    state.boidType === "morph" ? ATTRACTOR_SEED_MORPH_TYPE : state.boidType;
+    state.boidType === "morph"
+      ? (state.morphScope === "custom" &&
+          isAttractorOnlyMorph(state.morphScope, state.morphCustomTypes)
+          ? state.morphCustomTypes[0]
+          : ATTRACTOR_SEED_MORPH_TYPE)
+      : state.boidType;
   seedAttractorPoint(boundary, type);
   prewarmAttractor(boundary);
 }
@@ -700,7 +713,8 @@ function stepSimulation(stepTime, context) {
     state.sphereBoundary * (1.0 + sphereMagnitude * 0.7);
   const usesAttractorSimulation =
     ATTRACTOR_TYPES.has(state.boidType) ||
-    (state.boidType === "morph" && state.morphScope === "attractors");
+    (state.boidType === "morph" &&
+      isAttractorOnlyMorph(state.morphScope, state.morphCustomTypes));
   // Do not let bass-driven container expansion rescale the mathematical state
   // space. That changes the equations' effective coordinates and deforms the
   // attractor. Boid/liquid modes keep the existing reactive boundary.

@@ -42,6 +42,10 @@ export const defaults = Object.freeze({
   reactivity: 100,
   boidType: "flow",
   morphScope: "all",
+  morphCustomTypes: Object.freeze([
+    "flow", "flock", "swarm", "vortex", "orbit", "liquid",
+    "lorenz", "rossler", "halvorsen", "aizawa", "thomas", "dadras"
+  ]),
   morphSpeed: 1.0,
   movementSpeed: 1.0,
   movementAmount: 100,
@@ -103,7 +107,7 @@ export const PERSISTED_SETTING_KEYS = Object.freeze([
   "cameraPreset", "cameraSpeed", "cameraAmount", "cameraDistance", "cameraElevation", "cameraAzimuth",
   "hudEnabled", "hudOpacity", "hudScale",
   "qualityPreset", "renderPixelRatioLimit",
-  "reactivity", "boidType", "morphScope", "morphSpeed", "movementSpeed", "movementAmount",
+  "reactivity", "boidType", "morphScope", "morphCustomTypes", "morphSpeed", "movementSpeed", "movementAmount",
   "boidAlignment", "boidCohesion", "boidSeparation", "visualizationSize",
   "minParticles", "maxParticles", "particleSize", "particleOpacity", "noiseScale", "damping", "sphereBoundary",
   "attractorColorSource", "attractorTrails", "trailLength", "trailParticles", "trailOpacity",

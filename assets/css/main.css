@@ -1186,3 +1186,125 @@ progress::-moz-progress-bar {
 /* Mouse camera interaction on the visualization surface. */
 #canvas { cursor: grab; }
 #canvas.is-camera-dragging { cursor: grabbing; }
+
+
+/* --- Custom Morph Selection ---------------------------------------------- */
+.custom-morph-selection-control .custom-morph-edit {
+    grid-column: 1 / -1;
+    margin: 2px 0 0;
+    padding: 10px 12px;
+}
+.custom-morph-summary {
+    grid-column: 1 / -1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.custom-morph-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(8px);
+}
+.custom-morph-modal[hidden] { display: none; }
+.custom-morph-dialog {
+    width: min(560px, 100%);
+    max-height: min(760px, calc(100vh - 48px));
+    overflow: auto;
+    padding: 22px;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 14px;
+    background: #080808;
+    box-shadow: 0 20px 70px rgba(0,0,0,0.62);
+    color: #fff;
+}
+.custom-morph-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.09);
+}
+.custom-morph-kicker {
+    color: #3b82f6;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+}
+.custom-morph-header h2 {
+    margin-top: 4px;
+    font-size: 20px;
+    line-height: 1.1;
+}
+.custom-morph-close {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: #111;
+    color: #aaa;
+    font-size: 20px;
+    line-height: 1;
+}
+.custom-morph-copy {
+    margin: 14px 0;
+    color: #9a9a9a;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.custom-morph-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+.custom-morph-options label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    padding: 10px 11px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 7px;
+    background: rgba(255,255,255,0.025);
+    color: #c7c7c7;
+    cursor: pointer;
+    font-size: 12px;
+}
+.custom-morph-options label:hover {
+    border-color: rgba(59,130,246,0.45);
+    background: rgba(59,130,246,0.07);
+}
+.custom-morph-options input {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    accent-color: #3b82f6;
+}
+.custom-morph-validation {
+    min-height: 18px;
+    margin-top: 12px;
+    color: #8d8d8d;
+    font-size: 11px;
+}
+.custom-morph-validation[data-state="error"] { color: #f87171; }
+.custom-morph-validation[data-state="ready"] { color: #3b82f6; }
+.custom-morph-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+}
+.custom-morph-actions button {
+    flex: 1 1 0;
+    margin: 0;
+}
+@media (max-width: 640px) {
+    .custom-morph-options { grid-template-columns: 1fr; }
+}

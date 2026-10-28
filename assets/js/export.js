@@ -196,7 +196,9 @@ function compositeFrame(width, height) {
   compositeContext.fillRect(0, 0, width, height);
   compositeContext.drawImage(canvas, 0, 0, width, height);
 
-  const flash = state.beatFlashEnabled ? state.flashAlpha : 0;
+  // CSS opacity is implicitly clamped by the browser. Mirror that behavior in
+  // exported frames so >100% Flash Intensity cannot overdrive the composite.
+  const flash = state.beatFlashEnabled ? clamp(state.flashAlpha, 0, 1) : 0;
   if (flash > 0.001) {
     const centerX = width / 2;
     const centerY = height / 2;
@@ -347,13 +349,22 @@ async function waitForEncoderQueue(encoder, maximumQueueSize = 5) {
   }
 }
 
-function getEffectiveVideoBitrate(baseBitrateMbps, width, height) {
-  // Treat the selected value as the 1080p target, then scale gently for larger
-  // rasters. Square-root scaling avoids a 4x bitrate spike at 4K.
+function getEffectiveVideoBitrate(baseBitrateMbps, width, height, frameRate) {
+  // Treat the selected value as the 1080p/30 target. Particle fields with
+  // bloom are unusually difficult to encode because thousands of tiny bright
+  // details move every frame, so preserve more bits per frame as FPS rises.
   const basePixels = 1920 * 1080;
   const pixelScale = Math.max(1, (width * height) / basePixels);
   const resolutionScale = clamp(Math.sqrt(pixelScale), 1, 2.5);
-  return Math.round(clamp(baseBitrateMbps * resolutionScale, 1, 120) * 1_000_000);
+  const fpsScale = clamp(Math.sqrt(Math.max(1, frameRate) / 30), 1, 1.5);
+  const particleDetailScale = 1.12;
+  return Math.round(
+    clamp(
+      baseBitrateMbps * resolutionScale * fpsScale * particleDetailScale,
+      1,
+      120
+    ) * 1_000_000
+  );
 }
 
 function getVideoFrameTiming(frameIndex, frameRate) {
@@ -390,7 +401,7 @@ export function updateExportEstimate() {
   const { width, height } = getExportDimensions();
   const frameRate = Number(state.videoFrameRate) || videoExportDefaults.frameRate;
   const baseBitrateMbps = Number(state.videoBitrateMbps) || videoExportDefaults.bitrateMbps;
-  const videoBitrate = getEffectiveVideoBitrate(baseBitrateMbps, width, height);
+  const videoBitrate = getEffectiveVideoBitrate(baseBitrateMbps, width, height, frameRate);
   const audioBitrate = 192_000;
   const estimatedBytes = range.duration * (videoBitrate + audioBitrate) / 8 * 1.03;
   const totalFrames = Math.max(1, Math.ceil(range.duration * frameRate));
@@ -628,7 +639,7 @@ export async function exportVideo() {
   const frameRate = Number(state.videoFrameRate) || videoExportDefaults.frameRate;
   const baseBitrateMbps =
     Number(state.videoBitrateMbps) || videoExportDefaults.bitrateMbps;
-  const videoBitrate = getEffectiveVideoBitrate(baseBitrateMbps, width, height);
+  const videoBitrate = getEffectiveVideoBitrate(baseBitrateMbps, width, height, frameRate);
   const effectiveBitrateMbps = videoBitrate / 1_000_000;
 
   const exportRange = getVideoExportRange();

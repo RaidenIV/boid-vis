@@ -1044,9 +1044,18 @@ export function renderFrame(deltaTime, playing) {
     state.particleSize * (1.0 + sphereMagnitude * reactivity * 2.2);
   particleMaterial.opacity = state.particleOpacity / 100;
 
-  const bloomTarget = state.hasAudio
+  const rawBloomTarget = state.hasAudio
     ? state.bloomBase + avgMagnitude * reactivity * state.bloomGain
     : 0.55;
+  // Preserve the full low/mid-range Bloom controls, but compress extreme
+  // audio-driven values instead of allowing dense particle clusters to blow
+  // out into a flat white mass. The asymptotic ceiling is 1.8.
+  const bloomKnee = 1.1;
+  const bloomHeadroom = 0.7;
+  const bloomTarget = rawBloomTarget <= bloomKnee
+    ? rawBloomTarget
+    : bloomKnee + bloomHeadroom *
+      (1 - Math.exp(-(rawBloomTarget - bloomKnee) / bloomHeadroom));
   state.smoothedBloom += (bloomTarget - state.smoothedBloom) * 0.08;
   bloomPass.strength = state.smoothedBloom;
   bloomPass.radius = state.bloomRadius;

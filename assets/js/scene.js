@@ -121,7 +121,22 @@ const finalPass = new ShaderPass(
       void main() {
         vec4 base  = texture2D(baseTexture, vUv);
         vec4 bloom = texture2D(bloomTexture, vUv);
-        gl_FragColor = base + bloom;
+
+        // Bloom and dense additive particles can easily exceed display white.
+        // A hard framebuffer clamp creates flat white halos with abrupt edges,
+        // which video codecs turn into visible macroblocking. Preserve the
+        // additive look but roll only the highlights smoothly into white.
+        vec3 combined = max(base.rgb + bloom.rgb, vec3(0.0));
+        float peak = max(combined.r, max(combined.g, combined.b));
+        const float knee = 0.72;
+        if (peak > knee) {
+          float range = 1.0 - knee;
+          float rolledPeak = knee + range *
+            (1.0 - exp(-(peak - knee) / max(range, 0.0001)));
+          combined *= rolledPeak / max(peak, 0.0001);
+        }
+
+        gl_FragColor = vec4(combined, max(base.a, bloom.a));
       }
     `,
     transparent: true
